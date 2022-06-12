@@ -1,4 +1,4 @@
-(ns ionsails.config)
+(ns ionsails.ui.config)
 
 (def debug?
   ^boolean goog.DEBUG)

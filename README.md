@@ -1,5 +1,9 @@
 # ionsails
 
+## Demo
+
+To see the existing published demo, go to http://calebsmith.github.io/ionsails-demo/
+
 ## Getting Started
 
 ### Project Overview
@@ -140,14 +144,11 @@ Use `debug?` for logging or other tasks that should run only on `dev` builds:
 
 ## Production
 
-Build the app with the `prod` profile:
+Build the client using the client_build.sh script. This will place everything into a build/
+folder
 
 ```sh
-npm install
-npm run release
+./client_build.sh
 ```
 
-Please be patient; it may take over 15 seconds to see any output, and over 30 seconds to complete.
-
-The `resources/public/js/compiled` directory is created, containing the compiled `app.js` and
-`manifest.edn` files.
+This also creates `app.js` and `manifset.edn` files inside of the `resources/public/js/compiled` directory and can be used directly for local testing.

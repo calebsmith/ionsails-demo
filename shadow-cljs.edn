@@ -1,30 +1,16 @@
 {:nrepl {:port 8777}
-
+ :lein true
  :jvm-opts ["-Xmx1G"]
-
- :source-paths ["src" "test"]
-
- :dependencies
- [[reagent "1.1.1"]
-  [re-frame "1.2.0"]
-
-  [binaryage/devtools "1.0.6"]
-  [cider/cider-nrepl "0.28.4"]]
-
- :dev-http
- {8280 "resources/public"
-  8290 "target/browser-test"}
-
- :builds
- {:app
-  {:target     :browser
-   :output-dir "resources/public/js/compiled"
-   :asset-path "/js/compiled"
-   :modules
-   {:app {:init-fn ionsails.core/init}}
-   :devtools
-   {:preloads []}
-   :dev
-   {:compiler-options
-    {:closure-defines
-     { }}}}}}
+ :dev-http {8280 "resources/public"
+            8290 "target/browser-test"}
+ :builds {:app
+          {:target     :browser
+           :output-dir "resources/public/js/compiled"
+           :asset-path "/js/compiled"
+           :compiler-options {:infer-externs :auto
+                              :externs ["datascript/externs.js"]}
+           :modules {:app {:init-fn ionsails.ui.main/init}}
+           :devtools {:preloads []}
+           :dev {:compiler-options
+                 {:closure-defines
+                  {}}}}}}
