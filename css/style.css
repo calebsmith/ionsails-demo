@@ -1,0 +1,72 @@
+/* Network graph component styles */
+/* -- TBI -- */
+
+.network-graph {
+    width: 600px;
+    height: 400px;
+    border: 1px solid lightgray;
+}
+
+/* Console component styles */
+.console {
+    width: 640px;
+    height: 480px;
+    border: 1px solid lightgray;
+    background-color: black;
+    overflow: auto;
+    overflow-wrap: break-word;
+    color: white;
+    margin: 0px;
+    padding: 0px;
+
+}
+
+.console ul {
+    margin: 0px;
+    padding: 5px 10px;
+}
+
+.console li {
+    style: none;
+    list-style-type: none;
+}
+
+.console li.info {
+    color: white;
+}
+
+.console li.title {
+    color: yellow;
+}
+
+.console li.item {
+    color: green;
+}
+
+.console li.exit {
+    color: #88AAFF;
+}
+
+.console li.mob {
+    color: magenta;
+}
+
+.console li.echo {
+    color: #999;
+}
+
+.console li.warning {
+    color: red;
+}
+
+/* Command line component styles */
+.command-line input {
+    width: 640px;
+    height: 40px;
+    paddding: 15px;
+    margin: 0px;
+    font-size: 20px;
+    background-color: black;
+    color: #DDD;
+    border: 1px solid lightgray;
+}
