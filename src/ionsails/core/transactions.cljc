@@ -96,15 +96,15 @@
   {:name :delete
    :args {:entity ent-id}})
 
+(defn delete-attr
+  [ent-id attr]
+  {:name :delete-attr
+   :args {:entity ent-id
+          :attribute attr}})
+
 (defn retract
   [ent attr v]
   {:name :retract
    :args {:entity ent
            :attribute attr
            :value v}})
-
-(comment
-  (move-contents [{:source 1 :target 1 :entity 2}
-                  {:source 1 :target 1 :entity 1}])
-
-  )

@@ -156,17 +156,11 @@
       (assoc  :db/id -21
               :template-id -1003)))
 
-(def timer1
-  {:db/id -2000
-   :tick-action :consume-fuel-contents
-   :tick-next 1
-   :tick-recur 250})
-
 (def light
   (-> template-light
       (dissoc :template-name)
       (assoc  :db/id -42
-              :timers #{-2000}
+              :timers #{}
               :contents #{-21})))
 
 (def clothing1
@@ -226,7 +220,7 @@
 template-liquid1, template-liquid2
    liquid1, liquid2, liquid-container, liquid-container2
    template-clothing1, template-clothing2, clothing1 clothing2,
-   template-light, light, timer1])
+   template-light, light])
 
 ;; -- end temporary test data --
 

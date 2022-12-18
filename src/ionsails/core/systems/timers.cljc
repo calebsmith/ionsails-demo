@@ -1,6 +1,5 @@
 (ns ionsails.core.systems.timers
-  (:require
-   [ionsails.core.transactions :as t]))
+  (:require [ionsails.core.transactions :as t]))
 
 (defn set-next-tick
   [eid value]

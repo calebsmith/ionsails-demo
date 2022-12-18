@@ -15,12 +15,14 @@
 
 (defmethod tick-actions :consume-fuel-contents
   [db {:keys [:db/id tick-recur tick-next parent]}]
-  (let [container (q/vessel-details db parent)
-        ;; TODO: Add verification the container is still lit
-        flam-ents (flam/get-flammables container)
-        {:keys [consumed-amounts burn-rate]} (flam/find-burned-amounts flam-ents)
-        effects (e/consume-by-template-mapping flam-ents consumed-amounts)
-        effects (conj effects (stimers/recur-timer id (+ tick-next burn-rate)))
-        effects (cond-> effects
-                        (not= burn-rate tick-recur) (conj (stimers/set-recur id burn-rate)))]
-    effects))
+  (let [container (q/vessel-details db parent)]
+    (if-not (flam/burning? container)
+      ;; Safety measure just in case timer activated on extinguished entity
+      (e/purge id)
+      (let [flam-ents (flam/get-flammables container)
+            {:keys [consumed-amounts burn-rate]} (flam/find-burned-amounts flam-ents)
+            effects (e/consume-by-template-mapping flam-ents consumed-amounts)
+            effects (conj effects (stimers/recur-timer id (+ tick-next burn-rate)))
+            effects (cond-> effects
+                      (not= burn-rate tick-recur) (conj (stimers/set-recur id burn-rate)))]
+        effects))))

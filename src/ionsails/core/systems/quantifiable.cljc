@@ -1,4 +1,5 @@
-(ns ionsails.core.systems.quantifiable)
+(ns ionsails.core.systems.quantifiable
+  (:require [ionsails.util.noise.rand :as r]))
 
 ;; TODO: move to a util
 (defn floor [v]
@@ -19,19 +20,29 @@
   [desired-consumption q-ents]
   (if (or (zero? desired-consumption) (empty? q-ents))
     {}
-    ;; TODO: Use an alternate strategy if there are fewer unique ents than the amount
-    (let [amounts (map :quantity q-ents)
-          total-amounts (apply + amounts)
-          percentages (map #(/ % total-amounts) amounts)
-          consumption (min desired-consumption total-amounts)
-          per-liquid-map (into {} (map (fn [ent v]
-                                         [(:template-id ent) (floor (* v consumption))])
-                                       q-ents percentages))
-          total (apply + (vals per-liquid-map))]
-      (if (and (zero? total) (not-empty per-liquid-map))
-        ;; If all liquids are floored to zero, pick one at random to pull 1 from
-        (assoc per-liquid-map ((ffirst per-liquid-map)) 1)
-        per-liquid-map))))
+    (let [amounts (->> q-ents
+                       (map :quantity)
+                       (filter identity))
+          n-ents (count amounts)]
+      ;; Bifurcate the strategy based on the desired amount vs. the number of unique entities to pull from.
+
+      (if (< desired-consumption n-ents)
+        ;; If more entities than desired consumption, pick one at random weighted by their respective quantities
+        (let [weights-map (into {} (map (juxt :template-id :quantity) q-ents))
+              chosen-template-id (r/weighted-choice weights-map)]
+          {chosen-template-id (min desired-consumption (get weights-map chosen-template-id))})
+        ;; Otherwise pull some from each weighted by respective quantities
+        (let [total-amounts (apply + amounts)
+              percentages (map #(/ % total-amounts) amounts)
+              consumption (min desired-consumption total-amounts)
+              per-liquid-map (into {} (map (fn [ent v]
+                                             [(:template-id ent) (floor (* v consumption))])
+                                           q-ents percentages))
+              total (apply + (vals per-liquid-map))]
+          (if (and (zero? total) (not-empty per-liquid-map))
+              ;; If all liquids are floored to zero, pick one at random to pull 1 from
+            (assoc per-liquid-map ((ffirst per-liquid-map)) 1)
+            per-liquid-map))))))
 
 (defn consume-entity-actions
   "Derive actions needed to consume from `consumable-ents` given the mapping

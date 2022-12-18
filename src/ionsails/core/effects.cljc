@@ -88,3 +88,30 @@
                       (let [amount (get consumption-map template-id)]
                         (assoc l :quantity amount))) ents)]
     (map #(create-within % container-ent) new-sl)))
+
+(defn create-timer
+  [db containing-ent-id action duration & [recur?]]
+  (let [timer-id (t/new-id)
+        {:keys [value]} (q/get-tick db)
+        timer {:db/id timer-id
+               :tick-action action
+               :tick-next (+ value duration)}
+        timer (cond-> timer
+                recur? (assoc :tick-recur duration))]
+    (t/create timer
+              (fn [_ created-ent-id]
+                (t/upsert containing-ent-id :timers created-ent-id)))))
+
+
+;; Nothing interesting for now. Are these necessary?
+(defn set-state
+  [ent-id attr v]
+  (t/upsert ent-id attr v))
+
+(defn purge
+  [ent-id]
+  (t/delete ent-id))
+
+(defn remove-attr
+  [ent-id attr]
+  (t/delete-attr ent-id attr))

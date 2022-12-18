@@ -4,6 +4,7 @@
             [ionsails.core.defcommand :as dc :refer [defcommand defalias *db* *sender* *args*]]
             [ionsails.core.queries :as q]
             [ionsails.core.effects :as e]
+            [ionsails.core.systems.flammable :as flam]
             [ionsails.core.systems.quantifiable :as quant])
   #?(:clj (:require [clojure.pprint :as pprint]))
   #?(:cljs (:require [cljs.pprint :as pprint]))
@@ -259,6 +260,7 @@
     (dm msgs)))
 
 (defalias inv 'inventory)
+(defalias i 'inventory)
 
 ;; LOOK
 
@@ -355,6 +357,79 @@
   "south - Moves the player south if possible"
   (player-move :south))
 
+(defcommand up
+  "up - Moves the player vertically up if possible"
+  (player-move :up))
+
+(defcommand down
+  "down - Moves the player vertically down if possible"
+  (player-move :down))
+
+(defalias n 'north)
+(defalias s 'south)
+(defalias e 'east)
+(defalias w 'west)
+(defalias u 'up)
+(defalias d 'down)
+
+;; fire
+
+(defn handle-light
+  [keywords]
+  (if-let [item (q/find-in-inventory-or-room-query *db* *sender* keywords)]
+    (let [item-details (q/vessel-details *db* item)
+          item-title (get-title item-details)]
+      ;; TODO: Add requirements to light some items using tools or lit items
+      (if (flam/can-light? item-details)
+        (let [flam-targets (if (:burn-rate item-details)
+                             [item-details]
+                             (flam/get-flammables item-details))
+              {:keys [burn-rate consumed-amounts]} (flam/find-burned-amounts flam-targets)
+              consume-effects (e/consume-by-template-mapping flam-targets consumed-amounts)
+              burn-effects (flam/set-burn *db* item burn-rate)
+              effects (concat consume-effects burn-effects)]
+          (assoc
+           (dm-info "You light " item-title)
+           :effects effects))
+        (dm-err item-title " cannot be lit on fire.")))
+    (dm-err "There is nothing like that to light.")))
+
+(defn handle-extinguish
+  [keywords]
+  (if-let [item (q/find-in-inventory-or-room-query *db* *sender* keywords)]
+    (let [item-details (q/vessel-details *db* item)
+          item-title (get-title item-details)]
+      (if (flam/can-light? item-details)
+        (if (flam/burning? item-details)
+          (let [effects (flam/set-extinguish *db* item-details)]
+            (assoc (dm-info "You put out " item-title)
+                   :effects effects))
+          (dm-err item-title " is not currently burning."))
+        (dm-err item-title " cannot be lit on fire.")))
+    (dm-err "There is nothing like that here.")))
+
+(defcommand extinguish
+  ""
+  (let [num-args (count *args*)
+        [arg1] *args*
+        {:keys [keywords modifier]} arg1]
+    (match [num-args modifier]
+      [0 _] (dm-err "You must specify what you wish to extinguish - see `help extinguish`")
+      [1 _] (handle-extinguish keywords)
+      :else (dm-err "Incorrect syntax - see `help extinguish`"))))
+
+(defcommand light
+  ""
+(let [num-args (count *args*)
+        [arg1] *args*
+        {:keys [keywords modifier]} arg1]
+    (match [num-args modifier]
+      [0 _] (dm-err "You must specify what you wish to light - see `help light`")
+      [1 _] (handle-light keywords)
+      :else (dm-err "Incorrect syntax - see `help light`"))))
+
+;; TODO: defcommand extinguish
+
 
 ;; liquids
 
@@ -371,7 +446,7 @@
       (let [consumed-amounts-map (quant/find-consumed-amounts desired-consumption liquids)
             effects (e/consume-by-template-mapping liquids consumed-amounts-map)]
         (if container
-          (assoc (dm [{:category :info :text (str "You drink from " container-title)}])
+          (assoc (dm-info "You drink from " container-title)
                  :effects effects)
           (dm-warn "You're not holding anything like that or containing that drink."))))))
 

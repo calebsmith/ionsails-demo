@@ -228,7 +228,7 @@
 (defn item-details [db item] (d/pull db item-pull item))
 (defn items-details [db items] (d/pull-many db item-pull items))
 
-(def vessel-pull [:* {:contents [:*]}])
+(def vessel-pull [:* {:contents [:*] :timers [:*]}])
 (defn vessel-details [db item] (d/pull db vessel-pull item))
 
 (def player-inventory-pull
