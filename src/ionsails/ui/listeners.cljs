@@ -10,5 +10,4 @@
     (doseq [message messages]
       (let [{:keys [recipients body]} message]
         (when (contains? recipients sender)
-          (send :player-command-result {:messages body}))))))
-
+          (send :player-message-receive {:messages body}))))))

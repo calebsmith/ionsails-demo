@@ -40,14 +40,14 @@
   {:db/id -2
    :title "A spaceport dive bar"
    :description "A jagged and rough strewn room with a long bar and some stools"
-   :exits #{{:direction :east :location 3}}
+   :exits #{{:direction :east :location -3}}
    :contents #{-30}})
 
 (def room2
   {:db/id -3
    :title "A spaceport garage"
    :description "A vast steel room for docking and reparing ships"
-   :exits #{{:direction :west :location 2}}
+   :exits #{{:direction :west :location -2}}
    :contents #{-4 -6 -8 -18}})
 
 (def ship
@@ -112,8 +112,8 @@
   {:db/id -1003
    :template-name "olive-oil"
    :liquid? true
-   :burn-rate 250
-   :quantity 70
+   :burn-rate 4
+   :quantity 2
    :title "olive oil"
    :description "olive oil"
    :keywords #{"olive" "oil"}})
@@ -160,8 +160,19 @@
   (-> template-light
       (dissoc :template-name)
       (assoc  :db/id -42
-              :timers #{}
               :contents #{-21})))
+
+(def liquid3
+  (-> template-liquid2
+      (dissoc :template-name)
+      (assoc  :db/id -22
+              :template-id -1003)))
+
+(def light2
+  (-> template-light
+      (dissoc :template-name)
+      (assoc  :db/id -43
+              :contents #{-22})))
 
 (def clothing1
   (-> template-clothing1
@@ -210,7 +221,7 @@
    :description "a tall pale elf"
    :keywords #{"tall" "pale" "elf"}
    :equips #{-40}
-   :contents #{-5 -31 -41 -42}})
+   :contents #{-5 -31 -41 -42 -43}})
 
 (def test-data
   [global-tick, player, area, room , room2,
@@ -218,9 +229,9 @@
    mob,
    ship, ship2
 template-liquid1, template-liquid2
-   liquid1, liquid2, liquid-container, liquid-container2
+   liquid1, liquid2, liquid3, liquid-container, liquid-container2
    template-clothing1, template-clothing2, clothing1 clothing2,
-   template-light, light])
+   template-light, light light2])
 
 ;; -- end temporary test data --
 

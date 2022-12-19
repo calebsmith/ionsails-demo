@@ -2,36 +2,14 @@
   (:require [clojure.core.match :refer [match]]
             [clojure.string :as str]
             [ionsails.core.defcommand :as dc :refer [defcommand defalias *db* *sender* *args*]]
+            [ionsails.core.messages :refer [item info dm-info dm-warn dm-err dm] :as m]
+            [ionsails.core.titles  :as ti]
             [ionsails.core.queries :as q]
             [ionsails.core.effects :as e]
             [ionsails.core.systems.flammable :as flam]
             [ionsails.core.systems.quantifiable :as quant])
-  #?(:clj (:require [clojure.pprint :as pprint]))
-  #?(:cljs (:require [cljs.pprint :as pprint]))
   #?(:cljs (:require-macros [clojure.core.match :refer [match]]
                             [ionsails.core.defcommand :refer [defcommand defalias]])))
-
-;; HELPERS
-
-(defn dm [body]
-  {:messages [{:recipients #{*sender*} :body body}]})
-
-(defn msg [lvl-kw & txt]
-  {:category lvl-kw :text (apply str txt)})
-
-(def title (partial msg :title))
-(def exit (partial msg :exit))
-(def item (partial msg :item))
-(def info (partial msg :info))
-(def warn (partial msg :warning))
-(def err (partial msg :error))
-
-(defn dm-msg-lvl [lvl-fn & txt]
-  (dm [(apply lvl-fn txt)]))
-
-(def dm-info (partial dm-msg-lvl info))
-(def dm-warn (partial dm-msg-lvl warn))
-(def dm-err (partial dm-msg-lvl err))
 
 ;; CORE/BUILTINS
 
@@ -63,83 +41,6 @@
        (= (count kws-or-name) 1)
        (str/includes? (first kws-or-name) "-")))
 
-(declare get-title)
-(declare get-description)
-
-(defn get-liquids-title
-  [ents]
-  (let [liquids-count (count ents)
-        liquid-titles (map :title ents)]
-    (if (< liquids-count 2)
-      (first liquid-titles)
-      (str
-       (str/join ", " (butlast liquid-titles))
-       " and "
-       (last liquid-titles)))))
-
-(defn get-vessel-title
-  [ent]
-  (let [vessel-title (:title ent)
-        liquids (quant/get-liquids ent)
-        liquids-count (count liquids)
-        liquids-str (get-liquids-title liquids)]
-    (if (> liquids-count 0)
-      (str vessel-title " of " liquids-str)
-      vessel-title)))
-
-(defn get-liquid-title
-  [ent]
-  (let [title (:title ent)]
-    (str "a puddle of " title)))
-
-(defn get-edn
-  [ent]
-  (with-out-str (-> ent
-                    pprint/pprint)))
-
-(defn get-title
-  [ent]
-  (cond
-    (:template-name ent) (get-edn ent)
-    (:holds-liquid? ent) (get-vessel-title ent)
-    (:liquid? ent) (get-liquid-title ent)
-    :else (:title ent)))
-
-
-(defn get-container-description
-  [ent]
-  (if (:holds-liquid? ent)
-    ;; TBI: These two are similar for now but may want to show quantities of liquids
-    (let [container-title (:title ent)
-          container-desc (str container-title " contains:")
-          container-desc-msg (info container-desc)
-          inner-descs (mapv (fn [e] (item (get-title e))) (:contents ent))]
-      (if (empty? inner-descs)
-        [(info container-title " is empty")]
-        (concat [container-desc-msg] inner-descs)))
-    (let [container-title (get-title ent)
-          container-desc (str container-title " contains:")
-          container-desc-msg (info container-desc)
-          inner-descs (mapv (fn [e] (item (get-title e))) (:contents ent))]
-      (if (empty? inner-descs)
-        [(info container-title " is empty")]
-        (concat [container-desc-msg] inner-descs)))))
-
-(defn general-description
-  [ent]
-  (let [{:keys [can-hold? description health]} ent
-        headline-category (if can-hold? :item :title)]
-    (concat
-     [(msg headline-category "You see " description ".")]
-    ;; TODO: Create health description lookup
-     )))
-
-(defn get-description
-  [ent]
-  (cond
-    (:contents ent) (get-container-description ent)
-    :else (general-description ent)))
-
 ;; ITEMS
 
 
@@ -149,9 +50,9 @@
                       (q/find-in-room-query *db* *sender* container-kws))
         player (q/player-query *db* *sender*)
         item-details (when item (q/item-details *db* item))
-        item-title (get-title item-details)
+        item-title (ti/get-title item-details)
         container-details (when container (q/item-details *db* container))
-        container-title (get-title container-details)]
+        container-title (ti/get-title container-details)]
     (if (and player container item)
       (let [effects {:effects (e/move-contents-no-merge item player container)}
             reply-msg (dm-info "You put " item-title " into " container-title)]
@@ -171,10 +72,10 @@
   (let [ent-map (q/find-in-container-query *db* *sender* container-kws item-kws)
         {:keys [player container item]} ent-map
         item-details (when item (q/item-details *db* item))
-        item-title (get-title item-details)
+        item-title (ti/get-title item-details)
         can-hold-item? (:can-hold? item-details)
         container-details (when container (q/item-details *db* container))
-        container-title (get-title container-details)]
+        container-title (ti/get-title container-details)]
     (if (and player container item can-hold-item?)
       (let [effects {;; FIXME: replace with mergable version for materials
                      :effects (e/move-contents-no-merge item container player)}
@@ -196,7 +97,7 @@
       (let [{:keys [effects message-body]}
             (reduce (fn [agg item-detail]
                       (let [effect (e/move-contents-no-merge (:db/id item-detail) room player)
-                            item-title (get-title item-detail)
+                            item-title (ti/get-title item-detail)
                             msg (info "You pick up " item-title)]
                         (-> agg
                             (update :effects concat effect)
@@ -214,7 +115,7 @@
         item-holdable (:can-hold? item-details)]
     (if (and player room item item-holdable)
       (let [effects {:effects (e/move-contents-no-merge item room player)}
-            item-title (get-title item-details)
+            item-title (ti/get-title item-details)
             reply-msg (dm-info "You pick up " item-title)]
         (merge effects reply-msg))
       (if item
@@ -244,7 +145,7 @@
         item-details (when item (q/item-details *db* item))]
     (if (and player room item)
       (let [effects {:effects (e/move-contents-no-merge item player room)}
-            item-title (get-title item-details)
+            item-title (ti/get-title item-details)
             reply-msg (dm-info "You drop " item-title)]
         (merge effects reply-msg))
       (dm-warn "You have nothing like that to drop."))))
@@ -252,7 +153,7 @@
 (defcommand inventory
   "inventory - Shows the items you are holding"
   (let [inv (q/player-inventory *db* *sender*)
-        titles (map get-title inv)
+        titles (map ti/get-title inv)
         title-msgs (mapv item titles)
         msgs (if (empty? title-msgs)
                [(info "Your inventory is empty")]
@@ -269,7 +170,7 @@
         exit-names (->> exits (remove #(= (:closed? %) true)) (map :direction) (map name))
         room-content-outf (fn [v]
                             (let [{:keys [can-hold? can-free-will? can-transport? owner]} v
-                                  outm (info (get-title v))]
+                                  outm (info (ti/get-title v))]
                               (cond
                                 (= owner sender) nil
                                 can-hold? (assoc outm :category :item)
@@ -278,7 +179,7 @@
                                 :else outm)))
         content-output (->> contents (mapv room-content-outf))]
     (concat
-     [{:category :title :text (get-title look-room-res)}
+     [{:category :title :text (ti/get-title look-room-res)}
       {:category :info :text description}
       {:category :exit :text (apply str "Exits: " exit-names)}]
      content-output)))
@@ -298,23 +199,23 @@
 
 (defn format-ent-highlight-data
   [ent]
-  {:category :info :text (get-title ent)})
+  {:category :info :text (ti/get-title ent)})
 
 (defn look-at [keywords]
   (let [ent (q/look-at *db* *sender* keywords)]
     (if ent
-      (dm (get-description ent))
+      (dm (ti/get-description ent))
       (dm-warn "You see nothing like that here."))))
 
 (defn look-in [keywords]
   (if-let [ent (q/query-in-container *db* *sender* keywords)]
-    (dm (get-description ent))
+    (dm (ti/get-description ent))
     (dm-warn "You see nothing like that here")))
 
 (defn look-at-in
   [container-kws inner-kws]
   (if-let [ent (q/query-at-item-in-container *db* *sender* container-kws inner-kws)]
-    (dm (get-description ent))
+    (dm (ti/get-description ent))
     (dm-warn "You see nothing like that here.")))
 
 (defcommand look
@@ -338,6 +239,7 @@
     (let [res {:effects (e/move-contents-no-merge entity source target)
                :force-command "look"}
           messages (dm-info "You walk to the " (name direction))]
+      (prn res)
       (merge res messages))
     (dm-err "There is no open exit in that direction")))
 
@@ -378,19 +280,21 @@
   [keywords]
   (if-let [item (q/find-in-inventory-or-room-query *db* *sender* keywords)]
     (let [item-details (q/vessel-details *db* item)
-          item-title (get-title item-details)]
+          item-title (ti/get-title item-details)]
       ;; TODO: Add requirements to light some items using tools or lit items
       (if (flam/can-light? item-details)
-        (let [flam-targets (if (:burn-rate item-details)
-                             [item-details]
-                             (flam/get-flammables item-details))
-              {:keys [burn-rate consumed-amounts]} (flam/find-burned-amounts flam-targets)
-              consume-effects (e/consume-by-template-mapping flam-targets consumed-amounts)
-              burn-effects (flam/set-burn *db* item burn-rate)
-              effects (concat consume-effects burn-effects)]
-          (assoc
-           (dm-info "You light " item-title)
-           :effects effects))
+        (if-not (flam/burning? item-details)
+          (let [flam-targets (if (:burn-rate item-details)
+                               [item-details]
+                               (flam/get-flammables item-details))
+                {:keys [burn-rate consumed-amounts]} (flam/find-burned-amounts flam-targets)
+                consume-effects (e/consume-by-template-mapping flam-targets consumed-amounts)
+                burn-effects (flam/set-burn *db* item burn-rate)
+                effects (concat consume-effects burn-effects)]
+            (assoc
+             (dm-info "You light " item-title)
+             :effects effects))
+          (dm-err item-title " is alread lit."))
         (dm-err item-title " cannot be lit on fire.")))
     (dm-err "There is nothing like that to light.")))
 
@@ -398,7 +302,7 @@
   [keywords]
   (if-let [item (q/find-in-inventory-or-room-query *db* *sender* keywords)]
     (let [item-details (q/vessel-details *db* item)
-          item-title (get-title item-details)]
+          item-title (ti/get-title item-details)]
       (if (flam/can-light? item-details)
         (if (flam/burning? item-details)
           (let [effects (flam/set-extinguish *db* item-details)]
@@ -440,7 +344,7 @@
         container-details (when container (q/vessel-details *db* container))
         liquids (quant/get-liquids container-details)
         desired-consumption (or (:rate container-details) 50)
-        container-title (get-title container-details)]
+        container-title (ti/get-title container-details)]
     (if (empty? liquids)
       (dm-warn "There's nothing there to drink")
       (let [consumed-amounts-map (quant/find-consumed-amounts desired-consumption liquids)
@@ -458,7 +362,7 @@
           target-details (q/vessel-details *db* room)
           source-liquids (quant/get-liquids source-details)
           is-source-vessel? (:holds-liquid? source-details)
-          source-title (get-title source-details)
+          source-title (ti/get-title source-details)
           consumed-amounts-map (if (some? pour-amount-limit)
                                  (quant/find-consumed-amounts pour-amount-limit source-liquids)
                                  (quant/find-consume-all-map source-liquids))]
@@ -484,8 +388,8 @@
         source-details (when source (q/vessel-details *db* source))
         is-target-vessel? (:holds-liquid? target-details)
         is-source-vessel? (:holds-liquid? source-details)
-        target-title (get-title target-details)
-        source-title (get-title source-details)
+        target-title (ti/get-title target-details)
+        source-title (ti/get-title source-details)
         [target-liquids target-capacity] ((juxt quant/get-liquids :capacity) target-details)
         source-liquids (quant/get-liquids source-details)
         target-liquid-amounts (map :quantity target-liquids)
@@ -501,7 +405,7 @@
             src-effects (e/consume-by-template-mapping source-liquids consumed-amounts-map)
             target-effects (e/create-by-template-mapping source-liquids target-details consumed-amounts-map)
             effects (concat src-effects target-effects)
-            liquids-str (get-liquids-title source-liquids)]
+            liquids-str (ti/get-liquids-title source-liquids)]
         (if (zero? source-liquid-total)
           (dm-warn source-title " does not have anything in it.")
           (if (zero? remaining-in-target)
@@ -567,7 +471,7 @@
 (defn unequip-msg
   [item-details]
   (let [eq-loc (:equip-location item-details)
-        item-title (get-title item-details)
+        item-title (ti/get-title item-details)
         [reply-prefix reply-suffix]
 (if (#{:hand :hands} eq-loc)
                                           ["You stop holding " (str " in your " (name eq-loc))]
@@ -608,7 +512,7 @@
 (defn equip-msg
   [item-details]
   (let [eq-loc (:equip-location item-details)
-        item-title (get-title item-details)
+        item-title (ti/get-title item-details)
         [reply-prefix reply-suffix] (if (#{:hand :hands} eq-loc)
                                       ["You hold " (str " in your " (name eq-loc))]
                                       ["You wear " (str " on your " (name eq-loc))])]
@@ -650,7 +554,7 @@
 (defcommand equipment
   "equipment - Shows the items you are holding or wearing"
   (let [eq (q/player-equipment *db* *sender*)
-        titles (map get-title eq)
+        titles (map ti/get-title eq)
         title-msgs (mapv (fn [title] {:category :item :text title}) titles)
         msgs (if (empty? title-msgs)
                [{:category :info :text  "You have nothing equipped"}]
@@ -702,7 +606,7 @@ Also used to deactivate certain items being used together."
                       :keywords (q/find-in-inventory-or-room-query *db* *sender* query-term))]
       (if-let [val (q/find-by-eid *db* *sender* lookup)]
         (let [msg (->> val
-                       get-edn
+                       ti/get-edn
                        str/split-lines
                        (mapv (fn [t] {:category :edn :text t})))]
           (dm msg))
@@ -714,7 +618,7 @@ Also used to deactivate certain items being used together."
   [kws]
   (if-let [templates (q/template-search *db* *sender* kws)]
     (let [edn-lines (->> templates
-                         (map get-title)
+                         (map ti/get-title)
                          (map str/split-lines)
                          (apply concat))
           msg (mapv (fn [t] {:category :edn :text t})
@@ -735,7 +639,7 @@ Also used to deactivate certain items being used together."
           new-ent (dissoc ent :template-name)]
       (if (and room ent)
         (assoc
-         (dm-info "You spawn " (get-title new-ent))
+         (dm-info "You spawn " (ti/get-title new-ent))
          :effects [(e/create-within new-ent room-details)])
         (dm-warn "There is not an entity that matches that unique entity lookup.")))
     (dm-err "That query is not valid as a unique entity lookup")))

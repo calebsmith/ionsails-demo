@@ -4,7 +4,7 @@
             [ionsails.ui.pubsub :refer [send] :refer-macros [deflistener]]
             [ionsails.ui.data.console :as data :refer [main-console]]))
 
-(deflistener command-result :player-command-result
+(deflistener command-result :player-message-receive
   [{:keys [messages]} data]
   (data/append-messages! messages))
 
