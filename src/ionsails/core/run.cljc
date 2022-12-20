@@ -10,9 +10,7 @@
         res (handler db sender cmd-str)
         {:keys [messages effects force-command]} res]
     (when effects
-      (do
-        #_(prn "effects:" effects)
-        (a/apply-effects! conn db sender effects)))
+      (a/apply-effects! conn db sender effects))
     (if force-command
       (concat messages
               (run-command! sender force-command))

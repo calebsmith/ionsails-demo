@@ -179,9 +179,9 @@
                                 :else outm)))
         content-output (->> contents (mapv room-content-outf))]
     (concat
-     [{:category :title :text (ti/get-title look-room-res)}
-      {:category :info :text description}
-      {:category :exit :text (apply str "Exits: " exit-names)}]
+     [(m/title (ti/get-title look-room-res))
+      (m/info description)
+      (m/exit (apply str "Exits: " exit-names))]
      content-output)))
 
 (defn look-room [] (dm (format-room-data *sender* (q/look-room *db* *sender*))))
@@ -193,13 +193,11 @@
     (concat
      [{:category headline-category :text (str "You see " description ".")}]
     ;; FIXME: Create health description lookup
-     (if (= health 100)
-       [{:category :info :text "It is in perfect health."}]
-       [{:category :info :text "It is damaged."}]))))
+     )))
 
 (defn format-ent-highlight-data
   [ent]
-  {:category :info :text (ti/get-title ent)})
+  (info (ti/get-title ent)))
 
 (defn look-at [keywords]
   (let [ent (q/look-at *db* *sender* keywords)]
@@ -239,7 +237,6 @@
     (let [res {:effects (e/move-contents-no-merge entity source target)
                :force-command "look"}
           messages (dm-info "You walk to the " (name direction))]
-      (prn res)
       (merge res messages))
     (dm-err "There is no open exit in that direction")))
 
@@ -305,7 +302,7 @@
           item-title (ti/get-title item-details)]
       (if (flam/can-light? item-details)
         (if (flam/burning? item-details)
-          (let [effects (flam/set-extinguish *db* item-details)]
+          (let [effects (flam/set-extinguish item-details)]
             (assoc (dm-info "You put out " item-title)
                    :effects effects))
           (dm-err item-title " is not currently burning."))
@@ -345,16 +342,18 @@
         liquids (quant/get-liquids container-details)
         desired-consumption (or (:rate container-details) 50)
         container-title (ti/get-title container-details)]
-    (if (empty? liquids)
-      (dm-warn "There's nothing there to drink")
-      (let [consumed-amounts-map (quant/find-consumed-amounts desired-consumption liquids)
-            effects (e/consume-by-template-mapping liquids consumed-amounts-map)]
-        (if container
-          (assoc (dm-info "You drink from " container-title)
-                 :effects effects)
-          (dm-warn "You're not holding anything like that or containing that drink."))))))
+    (if (flam/burning? container-details)
+      (dm-warn "You decide not to drink a burning fluid")
+      (if (empty? liquids)
+        (dm-warn "There's nothing there to drink")
+        (let [consumed-amounts-map (quant/find-consumed-amounts desired-consumption liquids)
+              effects (e/consume-by-template-mapping liquids consumed-amounts-map)]
+          (if container
+            (assoc (dm-info "You drink from " container-title)
+                   :effects effects)
+            (dm-warn "You're not holding anything like that or containing that drink.")))))))
 
-;; TODO: add empty of any solids
+;; TODO: add empty of any solids?
 (defn handle-empty
   [src-kws & [pour-amount-limit]]
   (if-let [{:keys [room item]} (q/find-player-room-item-in-inv-query *db* *sender* src-kws)]
@@ -367,16 +366,17 @@
                                  (quant/find-consumed-amounts pour-amount-limit source-liquids)
                                  (quant/find-consume-all-map source-liquids))]
       (if (and is-source-vessel? (seq consumed-amounts-map))
-        (let [
-              src-effects (e/consume-by-template-mapping source-liquids consumed-amounts-map)
+        (let [src-effects (e/consume-by-template-mapping source-liquids consumed-amounts-map)
               target-effects (e/create-by-template-mapping source-liquids target-details consumed-amounts-map)
-              effects (concat src-effects target-effects)
-              msg (if (some? pour-amount-limit)
-                    (str "You empty some of " source-title " onto the ground.")
-                    (str "You empty " source-title " onto the ground."))]
-          (assoc
-           (dm-info msg)
-           :effects effects))
+              src-flam-effects (when (flam/burning? source-details) (flam/resolve-consume-source source-details consumed-amounts-map))
+              effects (concat src-effects target-effects src-flam-effects)
+              empty-msg (if (some? pour-amount-limit)
+                          (info "You empty some of " source-title " onto the ground.")
+                          (info "You empty " source-title " onto the ground."))
+              messages [empty-msg
+                        (when src-flam-effects (m/warn (:title source-details) " goes out."))]]
+          (assoc (dm messages)
+                 :effects effects))
         (dm-warn source-title " is already empty.")))
     (dm-warn "Cannot find anything like that to empty.")))
 
@@ -402,15 +402,21 @@
                           remaining-in-target)
             consumed-amounts-map (quant/find-consumed-amounts
                                   goal-amount source-liquids)
+            src-flam-effects (when (flam/burning? source-details) (flam/resolve-consume-source source-details consumed-amounts-map))
+            target-flam-effects (when (flam/burning? target-details) (flam/resolve-consume-target target-details source-liquids))
             src-effects (e/consume-by-template-mapping source-liquids consumed-amounts-map)
             target-effects (e/create-by-template-mapping source-liquids target-details consumed-amounts-map)
-            effects (concat src-effects target-effects)
-            liquids-str (ti/get-liquids-title source-liquids)]
+            effects (concat src-effects target-effects src-flam-effects target-flam-effects)
+            liquids-str (ti/get-liquids-title source-liquids)
+            success-msg (info "You fill " (:title target-details) " with " liquids-str " from " (:title source-details))
+            messages [success-msg
+                      (when src-flam-effects (m/warn (:title source-details) " goes out."))
+                      (when target-flam-effects (m/warn (:title target-details) " goes out."))]]
         (if (zero? source-liquid-total)
           (dm-warn source-title " does not have anything in it.")
           (if (zero? remaining-in-target)
             (dm-warn target-title " cannot hold any more.")
-            (assoc (dm-info "You fill " (:title target-details) " with " liquids-str " from " (:title source-details))
+            (assoc (dm messages)
                    :effects effects))))
       (if (and source target)
         (if is-target-vessel?
@@ -427,10 +433,10 @@
         [arg1 arg2] *args*
         {:keys [keywords modifier]} arg1]
     (match [num-args modifier]
-           [0 _] (dm-err "You must specify what you wish to fill and from what - see `help fill`")
-           [1 _] (dm-err "You must specify what you wish to fill and from what - see `help fill`")
-           [2 _] (handle-pour keywords (:keywords arg2))
-           :else (dm-err "Incorrect syntax - see `help fill`"))))
+      [0 _] (dm-err "You must specify what you wish to fill and from what - see `help fill`")
+      [1 _] (dm-err "You must specify what you wish to fill and from what - see `help fill`")
+      [2 _] (handle-pour keywords (:keywords arg2))
+      :else (dm-err "Incorrect syntax - see `help fill`"))))
 
 (defcommand pour
   "pour liquids"
@@ -499,7 +505,7 @@
       (let [{:keys [effects message-body]}
             (reduce (fn [agg item-detail]
                       (let [effect (e/unequip (:db/id item-detail) player player)
-                            msg {:category :info :text (unequip-msg item-detail)}]
+                            msg (info (unequip-msg item-detail))]
                         (-> agg
                             (update :effects concat effect)
                             (update :message-body conj msg))))
@@ -541,7 +547,7 @@
       (let [{:keys [effects message-body]}
             (reduce (fn [agg item-detail]
                       (let [effect (e/equip (:db/id item-detail) player player)
-                            msg {:category :info :text (equip-msg item-detail)}]
+                            msg (info (equip-msg item-detail))]
                         (-> agg
                             (update :effects concat effect)
                             (update :message-body conj msg))))
@@ -555,10 +561,10 @@
   "equipment - Shows the items you are holding or wearing"
   (let [eq (q/player-equipment *db* *sender*)
         titles (map ti/get-title eq)
-        title-msgs (mapv (fn [title] {:category :item :text title}) titles)
+        title-msgs (mapv m/item titles)
         msgs (if (empty? title-msgs)
-               [{:category :info :text  "You have nothing equipped"}]
-               (concat [{:category :info :text  "You have equipped:"}] title-msgs))]
+               [(info "You have nothing equipped")]
+               (concat [(info "You have equipped:")] title-msgs))]
     (dm msgs)))
 
 (defcommand unequip
@@ -579,7 +585,6 @@ Also used to deactivate certain items being used together."
   (let [num-args (count *args*)
         [arg1] *args*
         {:keys [keywords modifier]} arg1]
-    (prn *args*)
     (match [num-args modifier]
       [0 _] (dm-err "You must specify what you wish to equip - see `help equip`")
       [1 nil] (handle-equip keywords)
@@ -608,7 +613,7 @@ Also used to deactivate certain items being used together."
         (let [msg (->> val
                        ti/get-edn
                        str/split-lines
-                       (mapv (fn [t] {:category :edn :text t})))]
+                       (mapv m/edn))]
           (dm msg))
         (dm-warn "Nothing found matching that query."))
       (dm-warn "Nothing found matching those keywords."))
@@ -621,7 +626,7 @@ Also used to deactivate certain items being used together."
                          (map ti/get-title)
                          (map str/split-lines)
                          (apply concat))
-          msg (mapv (fn [t] {:category :edn :text t})
+          msg (mapv m/edn
                     (concat ["["] edn-lines ["]"]))]
       (dm msg))
     (dm-warn "Nothing found for that keyword query")))

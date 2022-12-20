@@ -2,19 +2,28 @@
   (:require [ionsails.core.systems.quantifiable :as quant]
             [ionsails.core.effects :as e]))
 
+(defn flammable?
+  [ent]
+  (some? (:burn-rate ent)))
+
 (defn get-flammables
   [vessel-details]
   (->> vessel-details
        :contents
-       (filter :burn-rate)))
+       (filter flammable?)))
+
+(defn get-non-flammables
+  [vessel-details]
+  (->> vessel-details
+       :contents
+       (remove flammable?)))
 
 (defn can-light?
   [item]
-  (some?
-   (or
-    (:burn-rate item)
-    (not-empty
-     (get-flammables item)))))
+  (or (flammable? item)
+      (and
+        (not-empty (get-flammables item))
+        (empty? (get-non-flammables item)))))
 
 (defn find-burned-amounts
   "Given a set of flammable entities, choose one at random, consume 1 of it, and find its burn-rate (number of ticks before consuming more)"
@@ -36,16 +45,16 @@
   (e/create-timer db ent-id :consume-fuel-contents burn-rate true))
 
 (defn- remove-burn-timer
-  [db ent]
+  [ent]
   (let [burn-timer-ids (->> (:timers ent)
                             (filter #(= (:tick-action %) :consume-fuel-contents))
                             (map :db/id))]
     (map e/purge burn-timer-ids)))
 
 (defn set-extinguish
-  [db ent]
+  [ent]
   (conj
-   (remove-burn-timer db ent)
+   (remove-burn-timer ent)
    (set-burn-state (:db/id ent) false)))
 
 (defn set-burn
@@ -56,3 +65,22 @@
 (defn burning?
   [ent]
   (:burning? ent))
+
+(defn resolve-consume-source
+  [ent consumption-map]
+  (let [liquids (quant/get-liquids ent)
+        src-remaining (reduce
+                       (fn [acc {:keys [template-id quantity]}]
+                         (let [amount (get consumption-map template-id 0)
+                               remaining (- quantity amount)]
+                           (+ acc remaining)))
+                       0
+                       liquids)]
+    (when (< src-remaining 1)
+      (set-extinguish ent))))
+
+(defn resolve-consume-target
+  [ent src-liquids]
+  (let [non-flam-liquids (remove flammable? src-liquids)]
+    (when-not (empty? non-flam-liquids)
+      (set-extinguish ent))))

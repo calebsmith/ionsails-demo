@@ -26,7 +26,7 @@
         (if (or (empty? flam-ents) (nil? burn-rate))
           (assoc
            (m/dm-err "Your " (ti/get-title-no-article container) " goes out")
-           :effects (flam/set-extinguish db container))
+           :effects (flam/set-extinguish container))
           (let [remaining-fuel (apply + (map :quantity flam-ents))
                 effects (e/consume-by-template-mapping flam-ents consumed-amounts)
                 effects (conj effects (stimers/recur-timer id (+ tick-next burn-rate)))

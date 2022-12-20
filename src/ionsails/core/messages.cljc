@@ -13,6 +13,7 @@
 (def info (partial msg :info))
 (def warn (partial msg :warning))
 (def err (partial msg :error))
+(def edn (partial msg :edn))
 
 (defn dm-msg-lvl [lvl-fn & txt]
   (dm [(apply lvl-fn txt)]))

@@ -109,17 +109,26 @@
    :keywords #{"pale" "amber" "beer"}})
 
 (def template-liquid2
-  {:db/id -1003
+  {:db/id -1002
    :template-name "olive-oil"
    :liquid? true
-   :burn-rate 4
-   :quantity 2
+   :burn-rate 250
+   :quantity 70
    :title "olive oil"
    :description "olive oil"
    :keywords #{"olive" "oil"}})
 
-(def template-clothing1
+(def template-liquid3
   {:db/id -1001
+   :template-name "water"
+   :liquid? true
+   :quantity 100
+   :title "water"
+   :description "water"
+   :keywords #{"water"}})
+
+(def template-clothing1
+  {:db/id -2001
    :equip-location :torso
    :layers "2"
    :title "a cloth tunic"
@@ -127,7 +136,7 @@
    :keywords #{"cloth" "tunic"}})
 
 (def template-clothing2
-  {:db/id -1002
+  {:db/id -2002
    :equip-location :legs
    :layers "2"
    :title "a pair of rugged breeches"
@@ -135,9 +144,10 @@
    :keywords #{"rugged" "breeches"}})
 
 (def template-light
-  {:db/id -1004
+  {:db/id -2004
    :can-hold? true
    :title "a brass lantern"
+   :holds-liquid? true
    :description "a brass lantern"
    :keywords #{"lantern" "brass"}})
 
@@ -154,7 +164,13 @@
   (-> template-liquid2
       (dissoc :template-name)
       (assoc  :db/id -21
-              :template-id -1003)))
+              :template-id -1002)))
+
+(def liquid3
+  (-> template-liquid2
+      (dissoc :template-name)
+      (assoc  :db/id -22
+              :template-id -1002)))
 
 (def light
   (-> template-light
@@ -162,11 +178,11 @@
       (assoc  :db/id -42
               :contents #{-21})))
 
-(def liquid3
-  (-> template-liquid2
+(def liquid4
+  (-> template-liquid3
       (dissoc :template-name)
-      (assoc  :db/id -22
-              :template-id -1003)))
+      (assoc  :db/id -23
+              :template-id -1001)))
 
 (def light2
   (-> template-light
@@ -211,7 +227,7 @@
    :title "a ceramic mug"
    :description "a ceramic mug"
    :keywords #{"mug" "ceramic"}
-   })
+   :contents #{-23}})
 
 ;; player
 (def player
@@ -228,8 +244,8 @@
    item, item2, item3, item4,
    mob,
    ship, ship2
-template-liquid1, template-liquid2
-   liquid1, liquid2, liquid3, liquid-container, liquid-container2
+   template-liquid1, template-liquid2, template-liquid3
+   liquid1, liquid2, liquid3, liquid4, liquid-container, liquid-container2
    template-clothing1, template-clothing2, clothing1 clothing2,
    template-light, light light2])
 
