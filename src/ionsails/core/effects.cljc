@@ -90,17 +90,18 @@
     (map #(create-within % container-ent) new-sl)))
 
 (defn create-timer
-  [db containing-ent-id action duration & [recur?]]
-  (let [timer-id (t/new-id)
-        tick (q/get-tick db)
-        timer {:db/id timer-id
-               :tick-action action
-               :tick-next (+ tick duration)}
-        timer (cond-> timer
-                recur? (assoc :tick-recur duration))]
-    (t/create timer
-              (fn [_ created-ent-id]
-                (t/upsert containing-ent-id :timers created-ent-id)))))
+  [containing-ent-id action duration & [recur?]]
+  (fn [db]
+    (let [timer-id (t/new-id)
+          tick (q/get-tick db)
+          timer {:db/id timer-id
+                 :tick-action action
+                 :tick-next (+ tick duration)}
+          timer (cond-> timer
+                        recur? (assoc :tick-recur duration))]
+      (t/create timer
+                (fn [_ created-ent-id]
+                  (t/upsert containing-ent-id :timers created-ent-id))))))
 
 
 ;; Nothing interesting for now. Are these necessary?

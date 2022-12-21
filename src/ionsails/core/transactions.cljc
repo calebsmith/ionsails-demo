@@ -44,14 +44,8 @@
 
 (defn derive-tx-data
   [action]
-  (let [{:keys [name args]} action]
-    (condp = name
-      :create [args]
-      :upsert (upsert-db args)
-      :retract (retract-db args)
-      :delete-attr (delete-attr-db args)
-      :delete (delete-db args)
-      nil)))
+  ;; FIXME: This is dumb. We'll move to a plain vector or something?
+  (:tx action))
 
 ;; Helpers for effects to construct operations
 
@@ -61,46 +55,26 @@
 
 (defn create
   [ent & [f]]
-  (let [res {:name :create :args ent}]
+  (let [res {:tx [ent]}]
     (if f
       (assoc res :after-tx
-              (fn [db tempids-map]
-                (when-let [value (get tempids-map (:db/id ent))]
-                  (f db value))))
+             (fn [db tempids-map]
+               (when-let [value (get tempids-map (:db/id ent))]
+                 (f db value))))
       res)))
 
 (defn upsert
   [ent attr v]
-  {:name :upsert
-   :args [{:entity ent
-           :attribute attr
-           :value v}]})
-
-(defn upserts
-  [pos-args]
-  (let [args (mapv
-              (fn [[entity attribute value]]
-                {:entity entity
-                 :attribute attribute
-                 :value value})
-              pos-args)]
-    {:name :upsert
-     :args args}))
+  {:tx [[:db/add ent attr v]]})
 
 (defn delete
   [ent-id]
-  {:name :delete
-   :args {:entity ent-id}})
+  {:tx [[:db/retractEntity ent-id]]})
 
 (defn delete-attr
   [ent-id attr]
-  {:name :delete-attr
-   :args {:entity ent-id
-          :attribute attr}})
+  {:tx [[:db/retract ent-id attr]]})
 
 (defn retract
   [ent attr v]
-  {:name :retract
-   :args {:entity ent
-           :attribute attr
-           :value v}})
+  {:tx [[:db/retract ent attr v]]})

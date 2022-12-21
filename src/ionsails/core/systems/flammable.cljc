@@ -41,8 +41,8 @@
     (e/remove-attr ent-id :burning?)))
 
 (defn- create-burn-timer
-  [db ent-id burn-rate]
-  (e/create-timer db ent-id :consume-fuel-contents burn-rate true))
+  [ent-id burn-rate]
+  (e/create-timer ent-id :consume-fuel-contents burn-rate true))
 
 (defn- remove-burn-timer
   [ent]
@@ -58,9 +58,9 @@
    (set-burn-state (:db/id ent) false)))
 
 (defn set-burn
-  [db ent-id burn-rate]
+  [ent-id burn-rate]
   [(set-burn-state ent-id true)
-   (create-burn-timer db ent-id burn-rate)])
+   (create-burn-timer ent-id burn-rate)])
 
 (defn burning?
   [ent]

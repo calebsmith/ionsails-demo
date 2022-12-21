@@ -361,7 +361,7 @@ See `help open`"
                                (flam/get-flammables item-details))
                 {:keys [burn-rate consumed-amounts]} (flam/find-burned-amounts flam-targets)
                 consume-effects (e/consume-by-template-mapping flam-targets consumed-amounts)
-                burn-effects (flam/set-burn *db* item burn-rate)
+                burn-effects (flam/set-burn item burn-rate)
                 effects (concat consume-effects burn-effects)]
             (assoc
              (dm-info "You light " item-title)
@@ -430,29 +430,30 @@ See `help open`"
 ;; TODO: add empty of any solids?
 (defn handle-empty
   [src-kws & [pour-amount-limit]]
-  (if-let [{:keys [room item]} (q/find-player-room-item-in-inv-query *db* *sender* src-kws)]
-    (let [source-details (q/vessel-details *db* item)
-          target-details (q/vessel-details *db* room)
-          source-liquids (quant/get-liquids source-details)
-          is-source-vessel? (:holds-liquid? source-details)
-          source-title (ti/get-title source-details)
-          consumed-amounts-map (if (some? pour-amount-limit)
-                                 (quant/find-consumed-amounts pour-amount-limit source-liquids)
-                                 (quant/find-consume-all-map source-liquids))]
-      (if (and is-source-vessel? (seq consumed-amounts-map))
-        (let [src-effects (e/consume-by-template-mapping source-liquids consumed-amounts-map)
-              target-effects (e/create-by-template-mapping source-liquids target-details consumed-amounts-map)
-              src-flam-effects (when (flam/burning? source-details) (flam/resolve-consume-source source-details consumed-amounts-map))
-              effects (concat src-effects target-effects src-flam-effects)
-              empty-msg (if (some? pour-amount-limit)
-                          (info "You empty some of " source-title " onto the ground.")
-                          (info "You empty " source-title " onto the ground."))
-              messages [empty-msg
-                        (when src-flam-effects (m/warn (:title source-details) " goes out."))]]
-          (assoc (dm messages)
-                 :effects effects))
-        (dm-warn source-title " is already empty.")))
-    (dm-warn "Cannot find anything like that to empty.")))
+  (let [{:keys [room item]} (q/find-player-room-item-in-inv-query *db* *sender* src-kws)]
+    (if (and room item)
+      (let [source-details (q/vessel-details *db* item)
+            target-details (q/vessel-details *db* room)
+            source-liquids (quant/get-liquids source-details)
+            is-source-vessel? (:holds-liquid? source-details)
+            source-title (ti/get-title source-details)
+            consumed-amounts-map (if (some? pour-amount-limit)
+                                   (quant/find-consumed-amounts pour-amount-limit source-liquids)
+                                   (quant/find-consume-all-map source-liquids))]
+        (if (and is-source-vessel? (seq consumed-amounts-map))
+          (let [src-effects (e/consume-by-template-mapping source-liquids consumed-amounts-map)
+                target-effects (e/create-by-template-mapping source-liquids target-details consumed-amounts-map)
+                src-flam-effects (when (flam/burning? source-details) (flam/resolve-consume-source source-details consumed-amounts-map))
+                effects (concat src-effects target-effects src-flam-effects)
+                empty-msg (if (some? pour-amount-limit)
+                            (info "You empty some of " source-title " onto the ground.")
+                            (info "You empty " source-title " onto the ground."))
+                messages [empty-msg
+                          (when src-flam-effects (m/warn (:title source-details) " goes out."))]]
+            (assoc (dm messages)
+                   :effects effects))
+          (dm-warn source-title " is already empty.")))
+      (dm-warn "Cannot find anything like that to empty."))))
 
 (defn handle-pour
   [target-kws source-kws & [pour-amount-limit]]
@@ -675,10 +676,10 @@ Also used to deactivate certain items being used together."
 
 (defn handle-inspect
   [query-term]
-  (if-let [typ (cond
-                 (number? query-term) :eid
-                 (is-unique-name-query? query-term) :template-name
-                 :else :keywords)]
+  (let [typ (cond
+              (number? query-term) :eid
+              (is-unique-name-query? query-term) :template-name
+              :else :keywords)]
     (if-let [lookup (condp = typ
                       :eid query-term
                       :template-name [:template-name (first query-term)]
@@ -690,8 +691,7 @@ Also used to deactivate certain items being used together."
                        (mapv m/edn))]
           (dm msg))
         (dm-warn "Nothing found matching that query."))
-      (dm-warn "Nothing found matching those keywords."))
-    (dm-err "Invalid argument. Must be EID, template-name or keywords")))
+      (dm-warn "Nothing found matching those keywords."))))
 
 (defn handle-query
   [kws]
