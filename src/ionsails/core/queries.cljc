@@ -14,10 +14,11 @@
     [(player-equipment ?eq ?owner)
      [?owner-eid :owner ?owner]
      [?owner-eid :equips ?eq]]
-    [(find-adjacent-location ?src-loc ?direction ?target-loc)
+    [(find-adjacent-location ?src-loc ?direction ?target-loc ?barrier)
      [?src-loc :exits ?exit]
      [?exit :direction ?direction]
-     [?exit :location ?target-loc]]
+     [?exit :location ?target-loc]
+     [(get-else $ ?exit :barrier :none) ?barrier ]]
     [(filter-by-kws ?kws-in ?ent)
      [?ent :keywords ?ent-kws]
      [(subset? ?kws-in ?ent-kws)]]])
@@ -257,22 +258,23 @@
   (when-let [v (find-in-room-or-inventory-query db owner keywords)]
     (d/pull db [:* {:contents [:title]}] v)))
 
+(def barrier-pull [:*])
+
 (defn move-room-eids
   [db owner direction]
-  (let [query-results
-        (d/q '[:find [?loc ?target-loc ?owner-eid]
-               :in $ % ?owner ?direction
-               :where
-               (player-location ?loc ?owner)
-               (find-adjacent-location ?loc ?direction ?target-loc)
-               [?owner-eid :owner ?owner]]
-             db rules owner direction)
-        [src-loc-eid target-loc-eid owner-eid] query-results]
-    (when (not (or (nil? query-results) (empty? query-results)))
-      {:source src-loc-eid,
-       :target target-loc-eid,
-       :entity owner-eid})))
-
+  (let [move-res (d/q '[:find [?loc ?target-loc ?owner-eid ?barrier]
+                        :keys source target entity barrier
+                        :in $ % ?owner ?direction
+                        :where
+                        (player-location ?loc ?owner)
+                        (find-adjacent-location ?loc ?direction ?target-loc ?barrier)
+                        [?owner-eid :owner ?owner]]
+                      db rules owner direction)]
+    (update move-res :barrier
+            (fn [barrier]
+              (if (or (= barrier :none) (nil? barrier))
+                nil
+                (d/pull db barrier-pull barrier))))))
 
 ;;; Timers ;;
 

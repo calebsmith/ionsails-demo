@@ -37,9 +37,6 @@
   [{:keys [entity]}]
    [[:db/retractEntity entity]])
 
-;; FIXME: deprecated
-(def move-contents (partial db-action move-contents->db-ops))
-
 (def upsert-db (partial db-action upsert->db-ops))
 (def retract-db (partial db-action retract->db-ops))
 (def delete-attr-db (partial db-action delete-attr->db-ops))
@@ -49,7 +46,6 @@
   [action]
   (let [{:keys [name args]} action]
     (condp = name
-      :move-contents (move-contents args)
       :create [args]
       :upsert (upsert-db args)
       :retract (retract-db args)

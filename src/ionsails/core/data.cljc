@@ -13,6 +13,8 @@
              :locations {:db/valueType :db.type/ref
                          :db/cardinality :db.cardinality/many
                          :db/isComponent true}
+             :barrier {:db/valueType :db.type/ref
+                        :db/cardinality :db.cardinality/one}
              :contents {:db/valueType :db.type/ref
                         :db/cardinality :db.cardinality/many}
              :equips {:db/valueType :db.type/ref
@@ -25,10 +27,12 @@
 
 (def test-sender "caleb@example.com caleb")
 
+;; Global tick timer
 (def global-tick
   {:db/id -999999
    :tick 0})
 
+;; discrete area entity
 (def area
   {:db/id -1
    :title "mars centari spaceport"
@@ -36,27 +40,34 @@
    :keywords #{"centari" "mars" "spaceport"}
    :locations #{-2 -3}})
 
+;; barrier entity
+(def door1
+  {:db/id -9
+   :state :closed})
+
+;; room entities
 (def room
   {:db/id -2
    :title "A spaceport dive bar"
    :description "A jagged and rough strewn room with a long bar and some stools"
-   :exits #{{:direction :east :location -3}}
+   :exits #{{:direction :east :location -3 :barrier -9}}
    :contents #{-30}})
 
 (def room2
   {:db/id -3
    :title "A spaceport garage"
    :description "A vast steel room for docking and reparing ships"
-   :exits #{{:direction :west :location -2}}
+   :exits #{{:direction :west :location -2 :barrier -9}}
    :contents #{-4 -6 -8 -18}})
 
+;; vehicles
 (def ship
   {:db/id -8
    :can-transport? true
    :title "a space glider"
    :keywords #{"space" "glider" "ship"}
    :description "a small space glider"
-   :contents #{}
+   ;; can have location
    :capacity 10})
 
 (def ship2
@@ -65,7 +76,7 @@
    :title "a space freight ship"
    :keywords #{"space" "freight" "ship"}
    :description "a large space freighter"
-   :contents #{}
+   ;; can have location
    :capacity 100})
 
 
@@ -103,6 +114,7 @@
   {:db/id -1000
    :template-name "pale-amber-beer"
    :liquid? true
+   :edibale? true
    :quantity 100
    :title "pale amber beer"
    :description "pale amber beer"
@@ -112,6 +124,7 @@
   {:db/id -1002
    :template-name "olive-oil"
    :liquid? true
+   :edibale? true
    :burn-rate 250
    :quantity 70
    :title "olive oil"
@@ -122,6 +135,7 @@
   {:db/id -1001
    :template-name "water"
    :liquid? true
+   :edibale? true
    :quantity 100
    :title "water"
    :description "water"
@@ -240,7 +254,7 @@
    :contents #{-5 -31 -41 -42 -43}})
 
 (def test-data
-  [global-tick, player, area, room , room2,
+  [global-tick, player, area, door1, room , room2
    item, item2, item3, item4,
    mob,
    ship, ship2

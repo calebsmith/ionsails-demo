@@ -6,12 +6,17 @@
             [ionsails.core.titles  :as ti]
             [ionsails.core.queries :as q]
             [ionsails.core.effects :as e]
+            [ionsails.core.systems.barriers :as bar]
             [ionsails.core.systems.flammable :as flam]
             [ionsails.core.systems.quantifiable :as quant])
   #?(:cljs (:require-macros [clojure.core.match :refer [match]]
                             [ionsails.core.defcommand :refer [defcommand defalias]])))
 
 ;; CORE/BUILTINS
+
+(defn not-implemented
+  [& args]
+  (dm-info "This command is not yet implemented"))
 
 (defcommand help
   "Use help to see information for a given command or topic. See `help commands` for a list of commands. (Messages given inside of `'s indicate what to type in the box below)"
@@ -230,15 +235,85 @@
 
 (defalias l 'look)
 
+;; Barriers
+
+(defn handle-close-direction
+  [direction]
+  (let [{:keys [barrier]} (q/move-room-eids *db* *sender* direction)]
+    (cond
+      (nil? barrier) (dm-warn "There is no door there to open")
+      (bar/locked? barrier) (dm-warn "The door is already closed and locked")
+      (bar/closed? barrier) (dm-warn "That is already closed")
+      (bar/can-close? barrier) (let [res {:effects (bar/set-closed (:db/id barrier))}
+                                    messages (dm-info "You close a door to the " (name direction))]
+                                (merge res messages))
+      :else (dm-err "You cannot close that"))))
+
+(defn handle-open-direction
+  [direction]
+  (let [{:keys [barrier]} (q/move-room-eids *db* *sender* direction)]
+    (cond
+      (bar/locked? barrier) (dm-warn "The door is locked")
+      (nil? barrier) (dm-warn "There is no door there to open")
+      (bar/open? barrier) (dm-warn "That is already open")
+      (bar/can-open? barrier) (let [res {:effects (bar/set-open (:db/id barrier))}
+                                    messages (dm-info "You open a door to the " (name direction))]
+                                (merge res messages))
+      :else (dm-err "You cannot open that"))))
+
+(defcommand open
+  "Opens a door, other barrier, or object.
+Syntax
+    open <direction>
+    open <item>
+
+See `help close`"
+  (let [num-args (count *args*)
+        [arg1] *args*
+        {:keys [keywords]} arg1
+        kw-str (first keywords)
+        direction? (bar/direction-str? kw-str)]
+    (match [num-args direction?]
+      [0 _] (dm-err "You must specify a direction or item to open - see `help open`")
+      [1 true] (handle-open-direction (bar/direction-str->keyword kw-str))
+      [1 false] (not-implemented keywords)
+      :else (dm-err "Incorrect syntax - see `help open`"))))
+
+(defcommand close
+  "Closes a door, other barrier, or object.
+Syntax
+    close <direction>
+    close <item>
+See `help open`"
+  (let [num-args (count *args*)
+        [arg1] *args*
+        {:keys [keywords]} arg1
+        kw-str (first keywords)
+        direction? (bar/direction-str? kw-str)]
+    (match [num-args direction?]
+      [0 _] (dm-err "You must specify a direction or item to close - see `help close`")
+      [1 true] (handle-close-direction (bar/direction-str->keyword kw-str))
+      [1 false] (not-implemented keywords)
+      :else (dm-err "Incorrect syntax - see `help close`"))))
+
+
+(defalias o 'open)
+(defalias c 'close)
+
+
 ;; MOVEMENT
 
 (defn player-move [direction]
-  (if-let [{:keys [source target entity]:as move-args} (q/move-room-eids *db* *sender* direction)]
-    (let [res {:effects (e/move-contents-no-merge entity source target)
-               :force-command "look"}
-          messages (dm-info "You walk to the " (name direction))]
-      (merge res messages))
-    (dm-err "There is no open exit in that direction")))
+  (let [{:keys [source target entity barrier]} (q/move-room-eids *db* *sender* direction)
+        closed? (bar/closed? barrier)]
+    (if (and source target entity (not closed?))
+      (let [res {:effects (e/move-contents-no-merge entity source target)
+                 :force-command "look"}
+            messages (dm-info "You walk to the " (name direction))]
+        (merge res messages))
+      (if closed?
+        (dm-err "There is a closed door in that direction")
+        (dm-err "There is no exit in that direction")))))
 
 (defcommand west
   "west - Moves the player west if possible"
@@ -329,8 +404,6 @@
       [1 _] (handle-light keywords)
       :else (dm-err "Incorrect syntax - see `help light`"))))
 
-;; TODO: defcommand extinguish
-
 
 ;; liquids
 
@@ -342,16 +415,17 @@
         liquids (quant/get-liquids container-details)
         desired-consumption (or (:rate container-details) 50)
         container-title (ti/get-title container-details)]
-    (if (flam/burning? container-details)
-      (dm-warn "You decide not to drink a burning fluid")
-      (if (empty? liquids)
-        (dm-warn "There's nothing there to drink")
-        (let [consumed-amounts-map (quant/find-consumed-amounts desired-consumption liquids)
-              effects (e/consume-by-template-mapping liquids consumed-amounts-map)]
-          (if container
-            (assoc (dm-info "You drink from " container-title)
-                   :effects effects)
-            (dm-warn "You're not holding anything like that or containing that drink.")))))))
+    (cond
+      (flam/burning? container-details) (dm-warn "You decide not to drink a burning fluid")
+      (empty? liquids) (dm-warn "There's nothing there to drink")
+      (empty? (remove #(some? (:ediable? %)) liquids)) (dm-warn "That is not edible")
+      :else
+      (let [consumed-amounts-map (quant/find-consumed-amounts desired-consumption liquids)
+            effects (e/consume-by-template-mapping liquids consumed-amounts-map)]
+        (if container
+          (assoc (dm-info "You drink from " container-title)
+                 :effects effects)
+          (dm-warn "You're not holding anything like that or containing that drink."))))))
 
 ;; TODO: add empty of any solids?
 (defn handle-empty
