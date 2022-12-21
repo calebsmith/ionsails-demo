@@ -92,10 +92,10 @@
 (defn create-timer
   [db containing-ent-id action duration & [recur?]]
   (let [timer-id (t/new-id)
-        {:keys [value]} (q/get-tick db)
+        tick (q/get-tick db)
         timer {:db/id timer-id
                :tick-action action
-               :tick-next (+ value duration)}
+               :tick-next (+ tick duration)}
         timer (cond-> timer
                 recur? (assoc :tick-recur duration))]
     (t/create timer

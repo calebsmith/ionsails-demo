@@ -64,15 +64,23 @@
   (testing "tick"
     (let [db (dat/get-db)
           res (sut/get-tick db)]
-      (is (= [1 0] res)))
-    (testing "timers"
+      (is (=
+           {:id 1 :value 0}
+           res)))
+    (testing "Foo"
       (let [db (dat/get-db)
-            res (sut/get-timers db 1)]
+            res (sut/get-tick-ident db)]
         (is (=
-             {:consume-fuel
-              [{:db/id 27,
-                :tick-action :consume-fuel,
-                :parent 4
-                :tick-next 1,
-                :tick-recur 2}]}
-             res))))))
+             {:id 1 :value 0}
+             res))))
+    #_(testing "timers"
+        (let [db (dat/get-db)
+              res (sut/get-timers db 1)]
+          (is (=
+               {:consume-fuel
+                [{:db/id 27,
+                  :tick-action :consume-fuel,
+                  :parent 4
+                  :tick-next 1,
+                  :tick-recur 2}]}
+               res))))))

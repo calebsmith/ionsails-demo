@@ -1,9 +1,9 @@
 (ns ionsails.core.systems.timers
   (:require [ionsails.core.transactions :as t]))
 
-(defn set-next-tick
-  [eid value]
-  (t/upsert eid :tick (inc value)))
+(defn inc-tick
+  [value]
+  (t/upsert [:counter :global] :tick (inc value)))
 
 (defn recur-timer
   [ent-id value]

@@ -1,7 +1,8 @@
 (ns ionsails.core.data
   (:require [datascript.core :as d]))
 
-(def schema {:template-name {:db/unique :db.unique/identity}
+(def schema {:counter {:db/unique :db.unique/identity}
+             :template-name {:db/unique :db.unique/identity}
              :template-id {:db/valueType :db.type/ref
                            :db/cardinality :db.cardinality/one}
              :owner {:db/unique :db.unique/identity}
@@ -23,14 +24,12 @@
                       :db/cardinality :db.cardinality/many
                          :db/isComponent true}})
 
+(def seed-data [[:db/add 1 :counter :global]
+                [:db/add 1 :tick 0]])
+
 ;; --- Temporary test data and globals --- ;;
 
 (def test-sender "caleb@example.com caleb")
-
-;; Global tick timer
-(def global-tick
-  {:db/id -999999
-   :tick 0})
 
 ;; discrete area entity
 (def area
@@ -254,7 +253,8 @@
    :contents #{-5 -31 -41 -42 -43}})
 
 (def test-data
-  [global-tick, player, area, door1, room , room2
+  [
+   , player, area, door1, room , room2
    item, item2, item3, item4,
    mob,
    ship, ship2
@@ -272,6 +272,7 @@
   (set! conn (d/conn-from-datoms (d/datoms @conn :eavt) schema)))
 
 (defn init []
+  (d/transact! conn seed-data)
   (d/transact! conn test-data))
 
 (defn get-conn [] conn)

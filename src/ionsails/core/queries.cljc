@@ -281,11 +281,7 @@
 
 (defn get-tick
   [db]
-  (d/q '[:find [?e ?v]
-         :keys id value
-         :in $
-         :where [?e :tick ?v]]
-       db))
+  (:tick (d/pull db [:tick] [:counter :global])))
 
 (defn get-timers
   [db tick-value]

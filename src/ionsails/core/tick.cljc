@@ -22,10 +22,10 @@
   []
   (let [conn (get-conn)
         db @conn
-        {:keys [id value]} (q/get-tick db)
-        timers-map (q/get-timers db value)
+        tick (q/get-tick db)
+        timers-map (q/get-timers db tick)
         {:keys [messages effects]} (run-timers! db timers-map)
-        next-tick-effect (timers/set-next-tick id value)
+        next-tick-effect (timers/inc-tick tick)
         effects (conj effects next-tick-effect)]
     (a/apply-effects! conn db nil effects)
     messages))
