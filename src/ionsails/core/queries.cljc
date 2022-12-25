@@ -148,19 +148,6 @@
          db rules owner keywords clojure.set/subset?)
     rank)))
 
-;; FIXME: Rewrite this to use rank/limit
-
-(defn find-in-container-query
-  [db owner container-kws container-rank inner-kws inner-rank]
-  (d/q '[:find [?owner-eid ?inv ?inside]
-         :keys player container item
-         :in $ % ?owner ?container-kw-in ?inner-kw-in subset?
-         :where
-         (player-inventory ?owner ?owner-eid ?inv)
-         (filter-by-kws ?container-kw-in ?inv)
-         [?inv :contents ?inside]
-         (filter-by-kws ?inner-kw-in ?inside)]
-       db rules owner container-kws inner-kws clojure.set/subset?))
 
 (defn find-vessel-query
   [db owner kws rank]
@@ -185,6 +172,22 @@
   [db owner keywords rank]
   (or (find-in-inventory-query db owner keywords rank)
       (find-in-room-query db owner keywords rank)))
+
+(defn find-in-container-query
+  [db owner container-kws container-rank inner-kws inner-rank]
+  (let [player  (player-query db owner)
+        container (find-in-inventory-or-room-query db owner container-kws container-rank)
+        item-inside-query-res (d/q '[:find [?inside]
+                                     :in $ % ?container ?inner-kw-in subset?
+                                     :where
+                                     [?container :contents ?inside]
+                                     (filter-by-kws ?inner-kw-in ?inside)
+                                     :limit inner-rank]
+                                   db rules container inner-kws clojure.set/subset?)
+        item-inside (select-by-rank item-inside-query-res inner-rank)]
+    {:player player
+     :container container
+     :item item-inside}))
 
 (defn query-in-container
   [db owner container-kws rank]

@@ -48,11 +48,10 @@
 
 ;; ITEMS
 
-
-(defn put-item-in [item-kws container-kws]
-  (let [item (q/find-in-inventory-query *db* *sender* item-kws 1)
-        container (or (q/find-in-inventory-query *db* *sender* container-kws 1)
-                      (q/find-in-room-query *db* *sender* container-kws 1))
+(defn put-item-in [item-kws item-rank container-kws container-rank]
+  (let [item (q/find-in-inventory-query *db* *sender* item-kws item-rank)
+        container (or (q/find-in-inventory-query *db* *sender* container-kws container-rank)
+                      (q/find-in-room-query *db* *sender* container-kws container-rank))
         player (q/player-query *db* *sender*)
         item-details (when item (q/item-details *db* item))
         item-title (ti/get-title item-details)
@@ -68,9 +67,9 @@
   "put - "
   (let [num-args (count *args*)
         [arg1 arg2] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier (:modifier arg2)]
-      [2 _ _] (put-item-in keywords (:keywords arg2))
+      [2 _ _] (put-item-in keywords rank (:keywords arg2) (:rank arg2))
       :else (dm-err "Incorrect syntax - see `help put`"))))
 
 (defn get-item-in [item-kws item-rank container-kws container-rank]
@@ -94,7 +93,7 @@
 
 (defn get-all
   [kw-in]
-  (let [ent-maps (q/find-player-room-items-in-room-query *db* *sender* kw-in 1)
+  (let [ent-maps (q/find-player-room-items-in-room-query *db* *sender* kw-in)
         {:keys [room player]} (first ent-maps)
         items-details (q/items-details *db* (map :item ent-maps))
         items-details (filter :can-hold? items-details)]
@@ -685,7 +684,7 @@ Also used to deactivate certain items being used together."
     (if-let [lookup (condp = typ
                       :eid query-term
                       :template-name [:template-name (first query-term)]
-                      :keywords (q/find-in-inventory-or-room-query *db* *sender* query-term (or  rank 1)))]
+                      :keywords (q/find-in-inventory-or-room-query *db* *sender* query-term rank))]
       (if-let [
                val (q/find-by-eid *db* *sender* lookup)]
         (let [msg (->> val
