@@ -9,5 +9,5 @@
         messages (r/run-command! sender (:message data))]
     (doseq [message messages]
       (let [{:keys [recipients body]} message]
-        (when (contains? recipients sender)
-          (send :player-message-receive {:messages body}))))))
+        ;; TODO: filter appropriately by recipients
+        (send :player-message-receive {:messages body})))))

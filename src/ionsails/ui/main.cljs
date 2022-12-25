@@ -30,7 +30,7 @@
   (pubsub/initialize)
   (mount-root)
   (timers/start!)
-  (pubsub/send :player-command-result {:messages [{:category :echo :text "Welcome new player! Type help and press enter for help."}]})
+  (pubsub/send :player-message-receive {:messages [{:category :echo :text "Welcome new player! Type help and press enter for help."}]})
   (pubsub/send :player-command {:message "look"}))
 
 (defn^ :dev/after-load start []

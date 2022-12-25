@@ -50,9 +50,9 @@
 
 
 (defn put-item-in [item-kws container-kws]
-  (let [item (q/find-in-inventory-query *db* *sender* item-kws)
-        container (or (q/find-in-inventory-query *db* *sender* container-kws)
-                      (q/find-in-room-query *db* *sender* container-kws))
+  (let [item (q/find-in-inventory-query *db* *sender* item-kws 1)
+        container (or (q/find-in-inventory-query *db* *sender* container-kws 1)
+                      (q/find-in-room-query *db* *sender* container-kws 1))
         player (q/player-query *db* *sender*)
         item-details (when item (q/item-details *db* item))
         item-title (ti/get-title item-details)
@@ -73,8 +73,8 @@
       [2 _ _] (put-item-in keywords (:keywords arg2))
       :else (dm-err "Incorrect syntax - see `help put`"))))
 
-(defn get-item-in [item-kws container-kws]
-  (let [ent-map (q/find-in-container-query *db* *sender* container-kws item-kws)
+(defn get-item-in [item-kws item-rank container-kws container-rank]
+  (let [ent-map (q/find-in-container-query *db* *sender* container-kws container-rank item-kws item-rank)
         {:keys [player container item]} ent-map
         item-details (when item (q/item-details *db* item))
         item-title (ti/get-title item-details)
@@ -94,7 +94,7 @@
 
 (defn get-all
   [kw-in]
-  (let [ent-maps (q/find-player-room-items-in-room-query *db* *sender* kw-in)
+  (let [ent-maps (q/find-player-room-items-in-room-query *db* *sender* kw-in 1)
         {:keys [room player]} (first ent-maps)
         items-details (q/items-details *db* (map :item ent-maps))
         items-details (filter :can-hold? items-details)]
@@ -113,8 +113,8 @@
         (merge {:effects effects} (dm message-body)))
       (dm-warn "You cannot pick anything up here."))))
 
-(defn get-item [kws]
-  (let [ent-map (q/find-player-room-item-in-room-query *db* *sender* kws)
+(defn get-item [kws rank]
+  (let [ent-map (q/find-player-room-item-in-room-query *db* *sender* kws rank)
         {:keys [player room item]} ent-map
         item-details (when item (q/item-details *db* item))
         item-holdable (:can-hold? item-details)]
@@ -132,20 +132,21 @@
   "get - "
   (let [num-args (count *args*)
         [arg1 arg2] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier (:modifier arg2)]
       [0 _ _] (dm-err "Incorrect syntax for get command - see `help get`")
       [1 :all _] (get-all keywords)
       [1 :each _] (get-all keywords)
-      [1 _ _] (get-item keywords)
-      [2 _ :in] (get-item-in keywords (:keywords arg2))
-      [2 _ :from] (get-item-in keywords (:keywords arg2))
+      [1 _ _] (get-item keywords rank)
+      [2 _ :in] (get-item-in keywords rank (:keywords arg2) (:rank arg2))
+      [2 _ :from] (get-item-in keywords rank (:keywords arg2) (:rank arg2))
       :else (dm-err "Incorrect syntax - see `help look`"))))
 
 (defcommand drop
   "drop - "
-  (let [kws (-> *args* first :keywords)
-        ent-map (q/find-player-room-item-in-inv-query *db* *sender* kws)
+  (let [arg (first *args*)
+        {:keys [keywords rank]} arg
+        ent-map (q/find-player-room-item-in-inv-query *db* *sender* keywords rank)
         {:keys [player room item]} ent-map
         item-details (when item (q/item-details *db* item))]
     (if (and player room item)
@@ -193,7 +194,7 @@
 
 (defn format-ent-detail-data
   [ent]
-  (let [{:keys [can-hold? description health]} ent
+  (let [{:keys [can-hold? description]} ent
         headline-category (if can-hold? :item :title)]
     (concat
      [{:category headline-category :text (str "You see " description ".")}]
@@ -204,20 +205,20 @@
   [ent]
   (info (ti/get-title ent)))
 
-(defn look-at [keywords]
-  (let [ent (q/look-at *db* *sender* keywords)]
+(defn look-at [keywords rank]
+  (let [ent (q/look-at *db* *sender* keywords rank)]
     (if ent
       (dm (ti/get-description ent))
       (dm-warn "You see nothing like that here."))))
 
-(defn look-in [keywords]
-  (if-let [ent (q/query-in-container *db* *sender* keywords)]
+(defn look-in [keywords rank]
+  (if-let [ent (q/query-in-container *db* *sender* keywords rank)]
     (dm (ti/get-description ent))
     (dm-warn "You see nothing like that here")))
 
 (defn look-at-in
-  [container-kws inner-kws]
-  (if-let [ent (q/query-at-item-in-container *db* *sender* container-kws inner-kws)]
+  [container-kws container-rank inner-kws inner-rank]
+  (if-let [ent (q/query-at-item-in-container *db* *sender* container-kws container-rank inner-kws inner-rank)]
     (dm (ti/get-description ent))
     (dm-warn "You see nothing like that here.")))
 
@@ -225,12 +226,12 @@
   "look command help text goes here..."
   (let [num-args (count *args*)
         [arg1 arg2] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier (:modifier arg2)]
            [0 _ _] (look-room)
-           [1 :in _] (look-in keywords)
-           [1 _ _] (look-at keywords)
-           [2 _ :in] (look-at-in (:keywords arg2) keywords)
+           [1 :in _] (look-in keywords rank)
+           [1 _ _] (look-at keywords rank)
+           [2 _ :in] (look-at-in (:keywords arg2) (:rank arg2) keywords rank)
            :else (dm-err "Incorrect syntax - see `help look`"))))
 
 (defalias l 'look)
@@ -349,8 +350,8 @@ See `help open`"
 ;; fire
 
 (defn handle-light
-  [keywords]
-  (if-let [item (q/find-in-inventory-or-room-query *db* *sender* keywords)]
+  [keywords rank]
+  (if-let [item (q/find-in-inventory-or-room-query *db* *sender* keywords rank)]
     (let [item-details (q/vessel-details *db* item)
           item-title (ti/get-title item-details)]
       ;; TODO: Add requirements to light some items using tools or lit items
@@ -371,8 +372,8 @@ See `help open`"
     (dm-err "There is nothing like that to light.")))
 
 (defn handle-extinguish
-  [keywords]
-  (if-let [item (q/find-in-inventory-or-room-query *db* *sender* keywords)]
+  [keywords rank]
+  (if-let [item (q/find-in-inventory-or-room-query *db* *sender* keywords rank)]
     (let [item-details (q/vessel-details *db* item)
           item-title (ti/get-title item-details)]
       (if (flam/can-light? item-details)
@@ -388,20 +389,20 @@ See `help open`"
   ""
   (let [num-args (count *args*)
         [arg1] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier]
       [0 _] (dm-err "You must specify what you wish to extinguish - see `help extinguish`")
-      [1 _] (handle-extinguish keywords)
+      [1 _] (handle-extinguish keywords rank)
       :else (dm-err "Incorrect syntax - see `help extinguish`"))))
 
 (defcommand light
   ""
 (let [num-args (count *args*)
         [arg1] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier]
       [0 _] (dm-err "You must specify what you wish to light - see `help light`")
-      [1 _] (handle-light keywords)
+      [1 _] (handle-light keywords rank)
       :else (dm-err "Incorrect syntax - see `help light`"))))
 
 
@@ -409,9 +410,9 @@ See `help open`"
 
 
 (defn handle-drink
-  [keywords]
-  (let [{:keys [player container]} (q/find-in-vessel-query *db* *sender* keywords)
-        container-details (when container (q/vessel-details *db* container))
+  [keywords rank]
+  (let [{:keys [player item]} (q/find-vessel-query *db* *sender* keywords rank)
+        container-details (when item (q/vessel-details *db* item))
         liquids (quant/get-liquids container-details)
         desired-consumption (or (:rate container-details) 50)
         container-title (ti/get-title container-details)]
@@ -422,15 +423,15 @@ See `help open`"
       :else
       (let [consumed-amounts-map (quant/find-consumed-amounts desired-consumption liquids)
             effects (e/consume-by-template-mapping liquids consumed-amounts-map)]
-        (if container
+        (if item
           (assoc (dm-info "You drink from " container-title)
                  :effects effects)
           (dm-warn "You're not holding anything like that or containing that drink."))))))
 
 ;; TODO: add empty of any solids?
 (defn handle-empty
-  [src-kws & [pour-amount-limit]]
-  (let [{:keys [room item]} (q/find-player-room-item-in-inv-query *db* *sender* src-kws)]
+  [src-kws rank & [pour-amount-limit]]
+  (let [{:keys [room item]} (q/find-player-room-item-in-inv-query *db* *sender* src-kws rank)]
     (if (and room item)
       (let [source-details (q/vessel-details *db* item)
             target-details (q/vessel-details *db* room)
@@ -456,9 +457,10 @@ See `help open`"
       (dm-warn "Cannot find anything like that to empty."))))
 
 (defn handle-pour
-  [target-kws source-kws & [pour-amount-limit]]
-  (let [{source :item player :player} (q/find-vessel-query *db* *sender* source-kws)
-        {target :item} (q/find-vessel-query *db* *sender* target-kws)
+  [target-kws target-rank source-kws src-rank & [pour-amount-limit]]
+  (prn target-kws target-rank source-kws src-rank)
+  (let [{source :item player :player} (q/find-vessel-query *db* *sender* source-kws src-rank)
+        {target :item} (q/find-vessel-query *db* *sender* target-kws target-rank)
         target-details (when target (q/vessel-details *db* target))
         source-details (when source (q/vessel-details *db* source))
         is-target-vessel? (:holds-liquid? target-details)
@@ -470,13 +472,14 @@ See `help open`"
         target-liquid-amounts (map :quantity target-liquids)
         source-liquid-total (apply + (map :quantity source-liquids))
         target-liquid-total (apply + target-liquid-amounts)
-        remaining-in-target (- target-capacity target-liquid-total)]
+        remaining-in-target (max 0 (- target-capacity target-liquid-total))]
     (if (and player source target is-target-vessel? is-source-vessel?)
       (let [goal-amount (if (some? pour-amount-limit)
                           (min remaining-in-target pour-amount-limit)
                           remaining-in-target)
             consumed-amounts-map (quant/find-consumed-amounts
                                   goal-amount source-liquids)
+            _ (prn "pour limit" pour-amount-limit remaining-in-target consumed-amounts-map)
             src-flam-effects (when (flam/burning? source-details) (flam/resolve-consume-source source-details consumed-amounts-map))
             target-flam-effects (when (flam/burning? target-details) (flam/resolve-consume-target target-details source-liquids))
             src-effects (e/consume-by-template-mapping source-liquids consumed-amounts-map)
@@ -487,6 +490,7 @@ See `help open`"
             messages [success-msg
                       (when src-flam-effects (m/warn (:title source-details) " goes out."))
                       (when target-flam-effects (m/warn (:title target-details) " goes out."))]]
+        (prn "src " src-effects " target " target-effects)
         (if (zero? source-liquid-total)
           (dm-warn source-title " does not have anything in it.")
           (if (zero? remaining-in-target)
@@ -506,45 +510,46 @@ See `help open`"
    Takes as much as the target can fit. Use `pour` to specify a quantity to pour"
   (let [num-args (count *args*)
         [arg1 arg2] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier]
       [0 _] (dm-err "You must specify what you wish to fill and from what - see `help fill`")
       [1 _] (dm-err "You must specify what you wish to fill and from what - see `help fill`")
-      [2 _] (handle-pour keywords (:keywords arg2))
+      [2 _] (handle-pour keywords rank (:keywords arg2) (:rank arg2))
       :else (dm-err "Incorrect syntax - see `help fill`"))))
 
 (defcommand pour
   "pour liquids"
   (let [num-args (count *args*)
         [arg1 arg2] *args*
-        {:keys [keywords modifier quantity]} arg1
-        target (:keywords arg2)]
+        {:keys [keywords modifier quantity rank]} arg1
+        target (:keywords arg2)
+        target-rank (:rank arg2)]
     (match [num-args modifier (some? quantity)]
       [0 _ _] (dm-err "You must specify how much to pour, what from, and what to pour into - see `help pour`")
       [1 _ _] (dm-err "You must specify how much to pour, what from, and what to pour into - see `help pour`")
       [2 _ false] (dm-err "You must specify how much to pour - see `help pour`")
-      [2 _ true]  (handle-pour target keywords quantity)
+      [2 _ true]  (handle-pour target target-rank keywords rank quantity)
       :else (dm-err "Incorrect syntax - see `help pour`"))))
 
 (defcommand empty
   "Empties a container of all contents onto the ground, including any fluids. Mostly used to pour out unwated liquids"
   (let [num-args (count *args*)
         [arg1 arg2] *args*
-        {:keys [keywords quantity]} arg1]
+        {:keys [keywords quantity rank]} arg1]
     (match [num-args ]
       [0] (dm-err "You must specify what container to empty - see `help empty`")
-      [1] (handle-empty keywords quantity)
+      [1] (handle-empty keywords quantity rank)
       :else (dm-err "Incorrect syntax - see `help pour`"))))
 
 (defcommand drink
   "Drink a liquid from a container you are holding. Specify the container or a liquid within it."
   (let [num-args (count *args*)
         [arg1] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier]
       [0 _] (dm-err "You must specify what you wish to drink - see `help drink`")
-      [1 _] (handle-drink keywords)
-      [1 :from] (handle-drink keywords)
+      [1 _] (handle-drink keywords rank)
+      [1 :from] (handle-drink keywords rank)
       :else (dm-err "Incorrect syntax - see `help drink`"))))
 
 ;; Equipment
@@ -554,15 +559,14 @@ See `help open`"
   (let [eq-loc (:equip-location item-details)
         item-title (ti/get-title item-details)
         [reply-prefix reply-suffix]
-(if (#{:hand :hands} eq-loc)
-                                          ["You stop holding " (str " in your " (name eq-loc))]
-                                          ["You stop wearing " (str " on your " (name eq-loc))])
-        ]
+        (if (#{:hand :hands} eq-loc)
+          ["You stop holding " (str " in your " (name eq-loc))]
+          ["You stop wearing " (str " on your " (name eq-loc))])]
     (str reply-prefix item-title reply-suffix)))
 
 (defn handle-unequip
-  [kws]
-  (let [{:keys [player room item]} (q/find-player-room-item-in-equips-query *db* *sender* kws)
+  [kws rank]
+  (let [{:keys [player room item]} (q/find-player-room-item-in-equips-query *db* *sender* kws rank)
         item-details (when item (q/item-details *db* item))]
     (if (and player room item)
       (let [effects {:effects (e/unequip item player player)}
@@ -600,8 +604,8 @@ See `help open`"
     (str reply-prefix item-title reply-suffix)))
 
 (defn handle-equip
-  [kws]
-  (let [{:keys [player room item]} (q/find-player-room-item-in-inv-query *db* *sender* kws)
+  [kws rank]
+  (let [{:keys [player room item]} (q/find-player-room-item-in-inv-query *db* *sender* kws rank)
         item-details (when item (q/item-details *db* item))
         item-equipable? (some? (:equip-location item-details))]
     (if (and player room item item-equipable?)
@@ -647,10 +651,10 @@ See `help open`"
 Also used to deactivate certain items being used together."
   (let [num-args (count *args*)
         [arg1] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier]
       [0 _] (dm-err "You must specify what you wish to unequip - see `help unequip`")
-      [1 nil] (handle-unequip keywords)
+      [1 nil] (handle-unequip keywords rank)
       [1 :all] (handle-unequip-all)
       :else (dm-err "Incorrect syntax - see `help unequip`"))))
 
@@ -659,14 +663,12 @@ Also used to deactivate certain items being used together."
   Also used to activate or use certain items in conjunction with each other."
   (let [num-args (count *args*)
         [arg1] *args*
-        {:keys [keywords modifier]} arg1]
+        {:keys [keywords modifier rank]} arg1]
     (match [num-args modifier]
       [0 _] (dm-err "You must specify what you wish to equip - see `help equip`")
-      [1 nil] (handle-equip keywords)
+      [1 nil] (handle-equip keywords rank)
       [1 :all] (handle-equip-all)
       :else (dm-err "Incorrect syntax - see `help equip`"))))
-
-
 
 (defalias wear 'equip)
 (defalias eq 'equipment)
@@ -675,7 +677,7 @@ Also used to deactivate certain items being used together."
 ;; ADMIN commands
 
 (defn handle-inspect
-  [query-term]
+  [query-term & [rank]]
   (let [typ (cond
               (number? query-term) :eid
               (is-unique-name-query? query-term) :template-name
@@ -683,8 +685,9 @@ Also used to deactivate certain items being used together."
     (if-let [lookup (condp = typ
                       :eid query-term
                       :template-name [:template-name (first query-term)]
-                      :keywords (q/find-in-inventory-or-room-query *db* *sender* query-term))]
-      (if-let [val (q/find-by-eid *db* *sender* lookup)]
+                      :keywords (q/find-in-inventory-or-room-query *db* *sender* query-term (or  rank 1)))]
+      (if-let [
+               val (q/find-by-eid *db* *sender* lookup)]
         (let [msg (->> val
                        ti/get-edn
                        str/split-lines
@@ -758,21 +761,21 @@ Also used to deactivate certain items being used together."
   ""
   (let [num-args (count *args*)
         [arg1] *args*
-        {:keys [keywords eid]} arg1]
+        {:keys [keywords eid rank]} arg1]
     (match [num-args (some? eid) (some? keywords)]
       [0 _ _] (dm-err "You must specify what to inspect by EID such as `inspect @1` or keyords - see `help inspect`")
       [1 false false] (dm-err "inspect requires an EID, or keywords - see `help inspect`")
       [1 true false] (handle-inspect eid)
-      [1 false true] (handle-inspect keywords)
+      [1 false true] (handle-inspect keywords rank)
       :else (dm-err "Incorrect syntax - see `help spawn`"))))
 
 (defcommand query
   "Query for an entity template using a unique name or keywords"
   (let [num-args (count *args*)
         [arg1] *args*
-        {:keys [keywords]} arg1]
+        {:keys [keywords rank]} arg1]
     (match [num-args (is-unique-name-query? keywords)]
       [0 _] (dm-err "You must specify what to query for - see `help query`")
       [1 false] (handle-query keywords)
-      [1 true] (handle-inspect keywords)
+      [1 true] (handle-inspect keywords rank)
       :else (dm-err "Incorrect syntax - see `help query`"))))

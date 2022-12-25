@@ -125,7 +125,7 @@
    :liquid? true
    :edibale? true
    :burn-rate 250
-   :quantity 70
+   :quantity 60
    :title "olive oil"
    :description "olive oil"
    :keywords #{"olive" "oil"}})
@@ -161,6 +161,7 @@
    :can-hold? true
    :title "a brass lantern"
    :holds-liquid? true
+   :capacity 70
    :description "a brass lantern"
    :keywords #{"lantern" "brass"}})
 
