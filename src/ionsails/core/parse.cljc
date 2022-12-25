@@ -7,14 +7,13 @@
 (defparser command-parser "
   COMMAND    = COM_NAME ARG*
   COM_NAME   = #'^\\w+'
-  ARG        = (REF | QUANT_REF | PREFIX_REF | SUFFIX_REF | RES_WORD)
-  SUFFIX_REF = REF SUFFIX
-  PREFIX_REF = PREFIX REF
-  QUANT_REF  = NUM REF
-  REF        = (EID | RANK | QUOTE | STR)
+  ARG        = (REF | PRE_REF | REF_RANK | PRE_REF_RANK | RES_WORD)
+  PRE_REF_RANK = (NUM | PREFIX) REF RANK
+  REF_RANK   = REF RANK
+  PRE_REF    = (NUM | PREFIX) REF
+  REF        = (QUOTE | STR | EID)
   RES_WORD = 'all'
   PREFIX   = 'each' | 'at' | 'in' | 'from' | 'to' | 'into'
-  SUFFIX   = 'out'
   RANK     = #'#\\d+'
   EID      = #'@\\d+'
   QUOTE    = #'\"[a-zA-Z -]+\"'
@@ -36,37 +35,48 @@
    (str/split
     (subs v 1 (dec (count v))) #" ")))
 
+(defn- ->stripped-int
+  [rank-or-eid]
+  (->int (subs rank-or-eid 1)))
+
 (defn- process-parser-data-ref
   [[tag-name value]]
   (condp = tag-name
-    :STR {:keywords #{value}}
-    :RANK {:rank (->int (subs value 1))}
-    :QUOTE {:keywords (->unquoted value)}
-    :EID {:eid (->int (subs value 1))}
+    :STR {:keywords #{value}
+          :rank 1}
+    :QUOTE {:keywords (->unquoted value)
+            :rank 1}
+    :EID {:eid (->stripped-int value)}
     :else {}))
 
-(defn- process-parser-data-quant-ref
+(defn- process-parser-data-pre-ref-rank
   [form]
-  (let [[num-pair ref-pair] form
-        [_ num-value] num-pair
+  (let [[[pre-tag pre-raw-v] [_ ref-value] [_ rank-value]] form
+        [attr pre-v] (if (= pre-tag :PREFIX)
+                       [:modifier (keyword pre-raw-v)]
+                       [:quantity (->int pre-raw-v)])
+        resolved-ref-map (process-parser-data-ref ref-value)
+        rank (->stripped-int rank-value)]
+    (assoc resolved-ref-map attr pre-v :rank rank)))
+
+(defn- process-parser-data-ref-rank
+  [form]
+  (let [[ref-pair rank-pair ] form
         [_ ref-value] ref-pair
-        quantity (->int num-value)
+        [_ rank-value] rank-pair
+        rank (->stripped-int rank-value)
         resolved-ref-map (process-parser-data-ref ref-value)]
-    (assoc resolved-ref-map :quantity quantity)))
+    (assoc resolved-ref-map :rank rank)))
 
-(defn- process-parser-data-prefix-ref
-  [form]
-  (let [[[_ prefix-value] [_ ref-value]] form
-        prefix (keyword prefix-value)
-        resolved-ref-map (process-parser-data-ref ref-value)]
-    (assoc resolved-ref-map :modifier prefix)))
 
-(defn- process-parser-data-suffix-ref
+(defn- process-parser-data-pre-ref
   [form]
-  (let [[[_ ref-value] [_ suffix-value]] form
-        suffix (keyword suffix-value)
+  (let [[[pre-tag pre-raw-v] [_ ref-value]] form
+        [attr pre-v] (if (= pre-tag :PREFIX)
+                       [:modifier (keyword pre-raw-v)]
+                       [:quantity (->int pre-raw-v)])
         resolved-ref-map (process-parser-data-ref ref-value)]
-    (assoc resolved-ref-map :modifier suffix)))
+    (assoc resolved-ref-map attr pre-v)))
 
 (defn- process-parser-arg-data
   "Processes each form that can be in ARG"
@@ -74,9 +84,9 @@
   (let [[tag-name & data] arg
         result (condp = tag-name
                  :REF (process-parser-data-ref (first data))
-                 :QUANT_REF (process-parser-data-quant-ref data)
-                 :PREFIX_REF (process-parser-data-prefix-ref data)
-                 :SUFFIX_REF (process-parser-data-suffix-ref data)
+                 :PRE_REF (process-parser-data-pre-ref data)
+                 :PRE_REF_RANK (process-parser-data-pre-ref-rank data)
+                 :REF_RANK (process-parser-data-ref-rank data)
                  :RES_WORD {:modifier (keyword (first data))}
                  :else (fn [_] {}))]
     result))
