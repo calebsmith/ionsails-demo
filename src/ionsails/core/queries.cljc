@@ -11,8 +11,8 @@
     [(player-inventory ?owner ?owner-eid ?inv)
      [?owner-eid :owner ?owner]
      [?owner-eid :contents ?inv]]
-    [(location-inventory ?loc ?loc-inv)
-     [?loc :contents ?loc-inv]]
+    [(entity-inventory ?ent ?ent-inv)
+     [?ent :contents ?ent-inv]]
     [(player-equipment ?owner ?owner-eid ?eq)
      [?owner-eid :owner ?owner]
      [?owner-eid :equips ?eq]]
@@ -20,7 +20,9 @@
      [?src-loc :exits ?exit]
      [?exit :direction ?direction]
      [?exit :location ?target-loc]
-     [(get-else $ ?exit :barrier :none) ?barrier ]]
+     [(get-else $ ?exit :barrier :none) ?barrier]]
+    [(filter-by-eid ?eid ?ent)
+     [(= ?ent ?eid)]]
     [(filter-by-kws ?kws-in ?ent)
      [?ent :keywords ?ent-kws]
      [(subset? ?kws-in ?ent-kws)]]])
@@ -61,142 +63,86 @@
             :where (player-location ?owner ?owner-eid ?loc)]
           db rules owner)))
 
-(defn find-player-room-items-in-inv-query
-  ([db owner keywords]
-   (find-player-room-items-in-inv-query db owner keywords 200))
-  ([db owner keywords limit]
-   (d/q '[:find ?owner-eid ?loc ?inv
-          :keys player room item
-          :in $ % ?owner ?kw-in subset?
-          :where
-          (player-location ?owner ?owner-eid ?loc)
-          (player-inventory ?owner ?owner-eid ?inv)
-          (filter-by-kws ?kw-in ?inv)
-          :limit limit]
-        db rules owner keywords clojure.set/subset?)))
+(defn- find-in-scope-query
+  [[scope & rest-scopes] db owner arg]
+  (let [{:keys [keywords eid rank]} arg
+        rank (or rank 999)
+        res (d/q {:find '[?owner-eid ?loc ?item]
+                  :keys '[player room item]
+                  :in '[$ % ?owner ?kw-in ?eid subset?]
+                  :where
+                  (concat
+                   ['(player-location ?owner ?owner-eid ?loc)]
+                   (condp = scope
+                     :player-inventory ['(player-inventory ?owner ?owner-eid ?item)]
+                     :player-equipment ['(player-equipment ?owner ?owner-eid ?item)]
+                     :player-room ['(entity-inventory ?loc ?item)]
+                     :player-inventory-vessels ['(player-inventory ?owner ?owner-eid ?item)
+                                                '[?item :holds-liquid? true]])
+                   (if eid
+                     ['(filter-by-eid ?eid ?item)]
+                     ['(filter-by-kws ?kw-in ?item)]))
+                  :limit rank}
+                 db rules owner keywords eid clojure.set/subset?)]
+    (if (or (seq res)
+            (empty? rest-scopes))
+      res
+      (recur rest-scopes db owner arg))))
 
-(defn find-player-room-item-in-inv-query
-  [db owner keywords rank]
-  (select-by-rank
-    (find-player-room-items-in-inv-query db owner keywords rank)
-    rank))
+(def qs-find-in-player-inv (partial find-in-scope-query [:player-inventory]))
+(def qs-find-in-player-room (partial find-in-scope-query [:player-room]))
+(def qs-find-in-player-inv-or-room (partial find-in-scope-query [:player-inventory :player-room]))
+(def qs-find-in-player-eq (partial find-in-scope-query [:player-equipment]))
+(def qs-find-in-player-inv-vessels (partial find-in-scope-query [:player-inventory-vessels]))
 
-(defn find-player-room-items-in-equips-query
-  ([db owner keywords]
-   (find-player-room-items-in-equips-query db owner keywords 200))
-  ([db owner keywords limit]
-   (d/q '[:find ?owner-eid ?loc ?player-eq
-          :keys player room item
-          :in $ % ?owner ?kw-in subset?
-          :where
-          (player-location ?owner ?owner-eid ?loc)
-          (player-equipment ?owner ?owner-eid ?player-eq)
-          (filter-by-kws ?kw-in ?player-eq)
-          :limit limit]
-        db rules owner keywords clojure.set/subset?)))
+(defn apply-select-to
+  "Chooses a single candidate from a queryset using rank if given."
+  [fun db owner arg]
+  (let [{:keys [eid rank]} arg]
+    (if eid
+      (first (fun db owner arg))
+      (select-by-rank
+       (fun db owner arg)
+       rank))))
 
-(defn find-player-room-item-in-equips-query
-  [db owner keywords rank]
-  (select-by-rank
-    (find-player-room-items-in-equips-query db owner keywords rank)
-    rank))
-
-(defn find-player-room-items-in-room-query
-  ([db owner keywords]
-   (find-player-room-items-in-room-query db owner keywords 999))
-  ([db owner keywords limit]
-   (d/q '[:find ?owner-eid ?loc ?loc-inv
-          :keys player room item
-          :in $ % ?owner ?kw-in subset?
-          :where
-          (player-location ?owner ?owner-eid ?loc)
-          (location-inventory ?loc ?loc-inv)
-          (filter-by-kws ?kw-in ?loc-inv)
-          :limit limit]
-        db rules owner keywords clojure.set/subset?)))
-
-(defn find-player-room-item-in-room-query
-  [db owner keywords rank]
-  (select-by-rank
-    (find-player-room-items-in-room-query db owner keywords rank)
-    rank))
-
-(defn find-in-room-query
-  [db owner keywords rank]
-  (first
-   (select-by-rank
-    (d/q '[:find ?loc-inv
-           :in $ % ?owner ?kw-in subset?
-           :where
-           (player-location ?owner ?owner-eid ?loc)
-           (location-inventory ?loc ?loc-inv)
-           (filter-by-kws ?kw-in ?loc-inv)
-           :limit rank]
-         db rules owner keywords clojure.set/subset?)
-    rank)))
-
-(defn find-in-inventory-query
-  [db owner keywords rank]
-  (first
-   (select-by-rank
-    (d/q '[:find ?inv
-           :in $ % ?owner ?kw-in subset?
-           :where
-           (player-inventory ?owner ?owner-id ?inv)
-           (filter-by-kws ?kw-in ?inv)
-           :limit rank]
-         db rules owner keywords clojure.set/subset?)
-    rank)))
+(def q-find-in-player-inv (partial apply-select-to qs-find-in-player-inv))
+(def q-find-in-player-room (partial apply-select-to qs-find-in-player-room))
+(def q-find-in-player-inv-or-room (partial apply-select-to qs-find-in-player-inv-or-room))
+(def q-find-in-player-eq (partial apply-select-to qs-find-in-player-eq))
+(def q-find-in-player-inv-vessels (partial apply-select-to qs-find-in-player-inv-vessels))
 
 
-(defn find-vessel-query
-  [db owner kws rank]
-  (select-by-rank
-   (d/q '[:find ?owner-eid ?inv
-          :keys player item
-          :in $ % ?owner ?kws-in subset?
-          :where
-          (player-inventory ?owner ?owner-eid ?inv)
-          [?inv :holds-liquid? true]
-          (filter-by-kws ?kws-in ?inv)
-          :limit rank]
-        db rules owner kws clojure.set/subset?)
-   rank))
+(def q-find-item-in-player-inv (comp :item q-find-in-player-inv ))
+(def q-find-item-in-player-inv-or-room (comp :item q-find-in-player-inv-or-room ))
 
-(defn find-in-room-or-inventory-query
-  [db owner keywords rank]
-  (or (find-in-room-query db owner keywords rank)
-      (find-in-inventory-query db owner keywords rank)))
-
-(defn find-in-inventory-or-room-query
-  [db owner keywords rank]
-  (or (find-in-inventory-query db owner keywords rank)
-      (find-in-room-query db owner keywords rank)))
-
-(defn find-in-container-query
-  [db owner container-kws container-rank inner-kws inner-rank]
-  (let [player  (player-query db owner)
-        container (find-in-inventory-or-room-query db owner container-kws container-rank)
-        item-inside-query-res (d/q '[:find [?inside]
-                                     :in $ % ?container ?inner-kw-in subset?
-                                     :where
-                                     [?container :contents ?inside]
-                                     (filter-by-kws ?inner-kw-in ?inside)
-                                     :limit inner-rank]
-                                   db rules container inner-kws clojure.set/subset?)
-        item-inside (select-by-rank item-inside-query-res inner-rank)]
+(defn q-find-item-container-in-player-inv-or-room
+  [db owner container-arg item-arg]
+  (let [{player :player container :item} (q-find-in-player-inv-or-room db owner container-arg)
+        {:keys [keywords eid rank]} item-arg
+        q-res (d/q {:find '[?item]
+                    :in '[$ % ?container ?inner-kw-in ?eid subset?]
+                    :where
+                    ['(entity-inventory ?container ?item)
+                     (if eid
+                       '(filter-by-eid ?eid ?item)
+                       '(filter-by-kws ?inner-kw-in ?item))]
+                    :limit rank}
+                   db rules container keywords eid clojure.set/subset?)
+        item (first (if eid
+                      (first q-res)
+                      (select-by-rank q-res rank)))]
     {:player player
      :container container
-     :item item-inside}))
+     :item item}))
 
 (defn query-in-container
-  [db owner container-kws rank]
-  (when-let [container (find-in-room-or-inventory-query db owner container-kws rank)]
+  [db owner arg]
+  (when-let [container (q-find-item-in-player-inv-or-room db owner arg)]
     (d/pull db [:* {:contents [:title]}] container)))
 
 (defn query-at-item-in-container
-  [db owner container-kws container-rank inner-kws inner-rank]
-  (let [ents (find-in-container-query db owner container-kws container-rank inner-kws inner-rank)
+  [db owner container-arg item-arg]
+  (let [ents (q-find-item-container-in-player-inv-or-room db owner container-arg item-arg)
         item (:item ents)]
     (when item
       (d/pull db [:*] item))))
@@ -242,8 +188,8 @@
   (d/pull db (merge player-inventory-pull player-equips-pull) (player-query db owner)))
 
 (defn look-at
-  [db owner keywords rank]
-  (when-let [v (find-in-room-or-inventory-query db owner keywords rank)]
+  [db owner arg]
+  (when-let [v (q-find-item-in-player-inv-or-room db owner arg)]
     (d/pull db [:* {:contents [:title]}] v)))
 
 (def barrier-pull [:*])

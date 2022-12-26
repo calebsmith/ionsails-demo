@@ -19,7 +19,7 @@
     (let [db (dat/get-db)
           room (sut/look-room db dat/test-sender)
           room-item (sut/look-at db dat/test-sender #{"wrench"})
-          inv-item-title (get-title-from-eid (sut/find-in-inventory-query db dat/test-sender #{"backpack"}))
+          inv-item-title (get-title-from-eid (sut/find-item-in-inventory-queryquery db dat/test-sender #{"backpack"}))
           container-list (:contents (sut/query-in-container db dat/test-sender #{"backpack"}))
           item-in-container (sut/query-at-item-in-container db dat/test-sender #{"backpack"} #{"adjustable"})
           ]
@@ -42,11 +42,11 @@
 (deftest ent-queries
   (testing "ent-queries"
     (let [db (dat/get-db)
-          res (sut/find-player-room-item-in-room-query db dat/test-sender #{"wrench"})
+          res (sut/q-find-in-player-room db dat/test-sender #{"wrench"})
           entmap (into {} (for [[k v] res] [k (:title (d/entity db v))]))]
       (is (= entmap {:room "A spaceport garage" :item "a wrench" :player "caleb"})))
     (let [db (dat/get-db)
-          res (sut/find-player-room-items-in-room-query db dat/test-sender #{})]
+          res (sut/q-find-in-player-room db dat/test-sender #{})]
       (is (= res #{{:player 9, :room 3, :item 8}
                    {:player 9, :room 3, :item 7}
                    {:player 9, :room 3, :item 10}
