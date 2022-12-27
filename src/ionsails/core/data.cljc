@@ -113,7 +113,7 @@
   {:db/id -1000
    :template-name "pale-amber-beer"
    :liquid? true
-   :edibale? true
+   :edible? true
    :quantity 100
    :title "pale amber beer"
    :description "pale amber beer"
@@ -123,7 +123,7 @@
   {:db/id -1002
    :template-name "olive-oil"
    :liquid? true
-   :edibale? true
+   :edible? true
    :burn-rate 250
    :quantity 60
    :title "olive oil"
@@ -134,7 +134,7 @@
   {:db/id -1001
    :template-name "water"
    :liquid? true
-   :edibale? true
+   :edible? true
    :quantity 100
    :title "water"
    :description "water"
@@ -168,7 +168,7 @@
 (def template-food1
   {:db/id -3000
    :template-name "red-apple"
-   :edibale? true
+   :edible? true
    :unit-phrase "a few bites"
    :charges 3
    :title "a red apple"

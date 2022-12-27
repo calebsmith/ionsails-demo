@@ -7,6 +7,7 @@
             [ionsails.core.queries :as q]
             [ionsails.core.effects :as e]
             [ionsails.core.systems.barriers :as bar]
+            [ionsails.core.systems.nutrition :as nut]
             [ionsails.core.systems.flammable :as flam]
             [ionsails.core.systems.quantifiable :as quant])
   #?(:cljs (:require-macros [clojure.core.match :refer [match]]
@@ -46,7 +47,7 @@
        (= (count kws-or-name) 1)
        (str/includes? (first kws-or-name) "-")))
 
-;; ITEMS
+;; Managing inventory
 
 (defn put-item-in [arg1 arg2]
   (let [item (q/q-find-item-in-player-inv *db* *sender* arg1)
@@ -421,6 +422,7 @@ See `help open`"
             (dm-err "You don't have anything like that to eat.")))
       (dm-err "Incorrect syntax - see `help eat`"))))
 
+
 ;; liquids
 
 
@@ -434,7 +436,7 @@ See `help open`"
     (cond
       (flam/burning? container-details) (dm-warn "You decide not to drink a burning fluid")
       (empty? liquids) (dm-warn "There's nothing there to drink")
-      (empty? (remove #(some? (:ediable? %)) liquids)) (dm-warn "That is not edible")
+      (not (nut/can-drink? container-details)) (dm-warn "That is not edible")
       :else
       (let [consumed-amounts-map (quant/find-consumed-amounts desired-consumption liquids)
             effects (e/consume-by-template-mapping liquids consumed-amounts-map)]
@@ -682,6 +684,32 @@ Also used to deactivate certain items being used together."
 (defalias wear 'equip)
 (defalias eq 'equipment)
 (defalias remove 'unequip)
+
+
+;; Convenience
+
+(defcommand use
+  ""
+  (let [num-args (count *args*)
+        [arg1] *args*]
+    (condp = num-args
+      0 (dm-err "You must specify what you wish to use - see `help use`")
+      1 (let [q-res (q/q-find-in-player-inv-or-room *db* *sender* arg1)
+              {:keys [player room item]} q-res]
+          (if item
+            (let [ent (q/vessel-details *db* item)
+                  subcommand (cond
+                               (nut/can-eat? ent) "eat"
+                               (nut/can-drink? ent) "drink"
+                               (flam/can-light? ent) "light"
+                               (some? (:equip-location ent)) "equip"
+                               :else nil)]
+              (prn q-res ent subcommand)
+              (if subcommand
+                (dc/invoke subcommand *args*)
+                (dm-err "This item can't be used in any obvious way.")))
+            (dm-err "Nothing like that can be found for use")))
+      (dm-err "Incorrect syntax - see `help use`"))))
 
 ;; ADMIN commands
 
