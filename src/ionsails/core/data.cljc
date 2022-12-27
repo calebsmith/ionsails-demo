@@ -165,6 +165,16 @@
    :description "a brass lantern"
    :keywords #{"lantern" "brass"}})
 
+(def template-food1
+  {:db/id -3000
+   :template-name "red-apple"
+   :edibale? true
+   :unit-phrase "a few bites"
+   :charges 3
+   :title "a red apple"
+   :description "a red apple"
+   :keywords #{"apple" "red"}})
+
 (def liquid1
   {:db/id -20
    :template-id -1000
@@ -185,6 +195,12 @@
       (dissoc :template-name)
       (assoc  :db/id -22
               :template-id -1002)))
+
+(def food1
+  (-> template-food1
+      (dissoc :template-name)
+      (assoc  :db/id -50
+              :template-id -3000)))
 
 (def light
   (-> template-light
@@ -251,7 +267,7 @@
    :description "a tall pale elf"
    :keywords #{"tall" "pale" "elf"}
    :equips #{-40}
-   :contents #{-5 -31 -41 -42 -43}})
+   :contents #{-5 -31 -41 -42 -43 -50}})
 
 (def test-data
   [
@@ -259,6 +275,8 @@
    item, item2, item3, item4,
    mob,
    ship, ship2
+   template-food1,
+   food1,
    template-liquid1, template-liquid2, template-liquid3
    liquid1, liquid2, liquid3, liquid4, liquid-container, liquid-container2
    template-clothing1, template-clothing2, clothing1 clothing2,

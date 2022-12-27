@@ -69,11 +69,14 @@
 
 (defn consume
   [ent amount]
-  (let [ent-id (:db/id ent)
-        quantity (:quantity ent)]
-    (if (> quantity amount)
-      (t/upsert ent-id :quantity (- quantity amount))
-      (t/delete ent-id))))
+  (let [{:keys [:db/id quantity charges]} ent]
+    (if (some? charges)
+      (if (> charges amount)
+        (t/upsert id :charges (- charges amount))
+        (t/delete id))
+      (if (> quantity amount)
+        (t/upsert id :quantity (- quantity amount))
+        (t/delete id)))))
 
 (defn consume-by-template-mapping
   [ents consumption-map]

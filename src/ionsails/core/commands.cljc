@@ -399,6 +399,28 @@ See `help open`"
       [1] (handle-light arg1)
       :else (dm-err "Incorrect syntax - see `help light`"))))
 
+;; food
+
+(defcommand eat
+  "Eat some food that you are holding."
+  (let [num-args (count *args*)
+        [arg1] *args*]
+    (condp = num-args
+      0 (dm-err "You must specify what you wish to eat - see `help eat`")
+      1 (let [food-q (q/q-find-in-player-inv *db* *sender* arg1)]
+          (if (:item food-q)
+            (let [{:keys [player room item]} food-q
+                  food-details (q/item-details *db* item)
+                  food-title (ti/get-title food-details)
+                  {:keys [unit-phrase charges quantity]} food-details
+                  remaining (if (some? charges) charges quantity)
+                  unit-phrase-msg (if (= remaining 1) "the rest" unit-phrase)
+                  effects (e/consume food-details 1)]
+              (assoc (dm-info "You eat " unit-phrase-msg " of " food-title)
+                     :effects effects))
+            (dm-err "You don't have anything like that to eat.")))
+      (dm-err "Incorrect syntax - see `help eat`"))))
+
 ;; liquids
 
 
